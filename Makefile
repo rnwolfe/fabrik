@@ -6,10 +6,16 @@ test: test-server test-frontend
 lint: lint-server lint-frontend
 
 # Server (Go)
-build-server:
+build-server: copy-knowledge-docs
 	cd server && go build -o ../bin/fabrik ./cmd/fabrik
 
-test-server:
+# Copy knowledge docs into server module for embedding.
+copy-knowledge-docs:
+	rm -rf server/cmd/fabrik/docs/knowledge
+	mkdir -p server/cmd/fabrik/docs
+	cp -r docs/knowledge server/cmd/fabrik/docs/knowledge
+
+test-server: copy-knowledge-docs
 	cd server && go test ./...
 
 lint-server:
@@ -35,4 +41,4 @@ serve:
 	@echo "TODO: run Go backend + Angular dev server with proxy"
 
 clean:
-	rm -rf bin/ dist/ frontend/dist/ frontend/.angular/
+	rm -rf bin/ dist/ frontend/dist/ frontend/.angular/ server/cmd/fabrik/docs/

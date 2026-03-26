@@ -1,17 +1,23 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/rnwolfe/fabrik/server/internal/api"
 	"github.com/rnwolfe/fabrik/server/internal/api/handlers"
+	"github.com/rnwolfe/fabrik/server/internal/knowledge"
 	"github.com/rnwolfe/fabrik/server/internal/migrations"
 	"github.com/rnwolfe/fabrik/server/internal/service"
 	"github.com/rnwolfe/fabrik/server/internal/store"
 )
+
+//go:embed all:docs/knowledge
+var docsFS embed.FS
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -34,6 +40,15 @@ func main() {
 	designSvc := service.NewDesignService(designStore)
 	designHandler := handlers.NewDesignHandler(designSvc)
 
+	// Wire up knowledge base
+	knowledgeSub, err := fs.Sub(docsFS, "docs/knowledge")
+	if err != nil {
+		slog.Error("failed to sub knowledge FS", "err", err)
+		os.Exit(1)
+	}
+	knowledgeLoader := knowledge.NewLoader(knowledgeSub)
+	knowledgeHandler := handlers.NewKnowledgeHandler(knowledgeLoader)
+
 	mux := http.NewServeMux()
 
 	// Health check
@@ -43,7 +58,7 @@ func main() {
 	})
 
 	// Register domain routes
-	api.RegisterRoutes(mux, designHandler)
+	api.RegisterRoutes(mux, designHandler, knowledgeHandler)
 
 	addr := ":8080"
 	if port := os.Getenv("FABRIK_PORT"); port != "" {
