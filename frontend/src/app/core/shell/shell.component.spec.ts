@@ -47,9 +47,9 @@ describe('ShellComponent', () => {
     const user = userEvent.setup();
     await renderShell();
     const themeService = TestBed.inject(ThemeService);
-    expect(themeService.current).toBe('light');
+    expect(themeService.current()).toBe('light');
     const btn = screen.getByRole('button', { name: /toggle dark mode/i });
     await user.click(btn);
-    expect(themeService.current).toBe('dark');
+    expect(themeService.current()).toBe('dark');
   });
 });

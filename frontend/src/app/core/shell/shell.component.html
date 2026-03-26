@@ -33,7 +33,7 @@
       [mode]="sidenavMode"
       [opened]="sidenavOpen()"
       class="app-sidenav"
-      (openedChange)="sidenavOpen.set($event)"
+      (openedChange)="_persistSidebarPref($event); sidenavOpen.set($event)"
     >
       <mat-nav-list>
         @for (item of navItems; track item.route) {

@@ -6,7 +6,7 @@ describe('ThemeService', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    document.body.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-theme');
     TestBed.configureTestingModule({});
     service = TestBed.inject(ThemeService);
   });
@@ -17,23 +17,23 @@ describe('ThemeService', () => {
 
   it('should default to light theme when no preference saved', () => {
     // matchMedia not available in jsdom — defaults to light
-    expect(service.current).toBe('light');
+    expect(service.current()).toBe('light');
   });
 
-  it('should apply data-theme attribute to body', () => {
-    expect(document.body.getAttribute('data-theme')).toBe('light');
+  it('should apply data-theme attribute to html element', () => {
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 
   it('should toggle from light to dark', () => {
     service.toggle();
-    expect(service.current).toBe('dark');
-    expect(document.body.getAttribute('data-theme')).toBe('dark');
+    expect(service.current()).toBe('dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
   it('should toggle from dark to light', () => {
     service.setTheme('dark');
     service.toggle();
-    expect(service.current).toBe('light');
+    expect(service.current()).toBe('light');
   });
 
   it('should persist theme to localStorage', () => {
@@ -47,6 +47,6 @@ describe('ThemeService', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({});
     const restored = TestBed.inject(ThemeService);
-    expect(restored.current).toBe('dark');
+    expect(restored.current()).toBe('dark');
   });
 });

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal, Signal } from '@angular/core';
 
 export type Theme = 'light' | 'dark';
 
@@ -6,23 +6,22 @@ const THEME_KEY = 'fabrik-theme';
 
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
-  private _current: Theme = 'light';
+  private readonly _currentSignal = signal<Theme>('light');
+
+  /** Read-only signal that reflects the active theme. */
+  readonly current: Signal<Theme> = this._currentSignal.asReadonly();
 
   constructor() {
-    this._current = this._resolveInitialTheme();
-    this._applyTheme(this._current);
-  }
-
-  get current(): Theme {
-    return this._current;
+    this._currentSignal.set(this._resolveInitialTheme());
+    this._applyTheme(this._currentSignal());
   }
 
   toggle(): void {
-    this.setTheme(this._current === 'light' ? 'dark' : 'light');
+    this.setTheme(this._currentSignal() === 'light' ? 'dark' : 'light');
   }
 
   setTheme(theme: Theme): void {
-    this._current = theme;
+    this._currentSignal.set(theme);
     this._applyTheme(theme);
     this._persist(theme);
   }
@@ -38,8 +37,8 @@ export class ThemeService {
 
   private _applyTheme(theme: Theme): void {
     if (typeof document === 'undefined') return;
-    document.body.setAttribute('data-theme', theme);
-    document.body.style.colorScheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
   }
 
   private _persist(theme: Theme): void {

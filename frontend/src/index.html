@@ -23,8 +23,8 @@
               ? 'dark'
               : 'light';
           }
-          document.body.setAttribute('data-theme', theme);
-          document.body.style.colorScheme = theme;
+          document.documentElement.setAttribute('data-theme', theme);
+          document.documentElement.style.colorScheme = theme;
         } catch (e) {
           // localStorage unavailable — no-op
         }

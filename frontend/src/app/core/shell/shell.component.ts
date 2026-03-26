@@ -64,7 +64,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   sidenavOpen = signal(this._loadSidebarPref());
   isLoading = signal(false);
 
-  readonly isDark = computed(() => this._theme.current === 'dark');
+  readonly isDark = computed(() => this._theme.current() === 'dark');
 
   get sidenavMode(): 'over' | 'side' {
     return this.isMobile() ? 'over' : 'side';
@@ -122,7 +122,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     return true; // default open
   }
 
-  private _persistSidebarPref(open: boolean): void {
+  protected _persistSidebarPref(open: boolean): void {
     try {
       localStorage.setItem(SIDEBAR_KEY, String(open));
     } catch {

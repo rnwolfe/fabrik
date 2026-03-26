@@ -18,12 +18,27 @@ html {
     )
   );
 
-  // fabrik brand CSS custom properties — override Material vars
+  // fabrik brand CSS custom properties
   --fabrik-primary: #0d9488;
   --fabrik-primary-dark: #0f766e;
   --fabrik-surface: #1e293b;
   --fabrik-surface-variant: #334155;
   --fabrik-on-surface: #f1f5f9;
+
+  // Map fabrik brand colors to Angular Material system tokens so Material
+  // components use the brand palette instead of the default theme palette.
+  --mat-sys-primary: var(--fabrik-primary);
+  --mat-sys-on-primary: #ffffff;
+  --mat-sys-primary-container: #ccfbf1;
+  --mat-sys-on-primary-container: #003d35;
+  --mat-sys-secondary: var(--fabrik-surface-variant);
+  --mat-sys-on-secondary: #ffffff;
+  --mat-sys-secondary-container: #cbd5e1;
+  --mat-sys-on-secondary-container: #0f172a;
+  --mat-sys-surface: #ffffff;
+  --mat-sys-on-surface: #1e293b;
+  --mat-sys-surface-container-low: #f8fafc;
+  --mat-sys-outline-variant: #e2e8f0;
 }
 
 body {
@@ -34,13 +49,26 @@ body {
   font: var(--mat-sys-body-medium);
   margin: 0;
   height: 100%;
+}
 
-  // Dark mode — activated by ThemeService via data-theme="dark"
-  &[data-theme='dark'] {
-    color-scheme: dark;
-  }
+// Dark mode — activated by ThemeService via data-theme="dark" on <html>
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  // Override Material system tokens for dark mode using brand palette
+  --mat-sys-primary: #2dd4bf;
+  --mat-sys-on-primary: #003731;
+  --mat-sys-primary-container: #004f45;
+  --mat-sys-on-primary-container: #a7f3d0;
+  --mat-sys-secondary: #94a3b8;
+  --mat-sys-on-secondary: #1e293b;
+  --mat-sys-secondary-container: #334155;
+  --mat-sys-on-secondary-container: #e2e8f0;
+  --mat-sys-surface: #0f172a;
+  --mat-sys-on-surface: #e2e8f0;
+  --mat-sys-surface-container-low: #1e293b;
+  --mat-sys-outline-variant: #334155;
 }
 
 // Ensure no flash of unstyled content: inline script in index.html sets
 // data-theme before Angular bootstraps (see index.html)
-
