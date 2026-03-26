@@ -4,6 +4,7 @@ package service
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
 )
@@ -28,6 +29,8 @@ func NewDesignService(repo DesignRepository) *DesignService {
 
 // CreateDesign validates and creates a new Design.
 func (s *DesignService) CreateDesign(name, description string) (*models.Design, error) {
+	// Trim whitespace so that names like "   " are rejected alongside "".
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: design name is required", models.ErrConstraintViolation)
 	}

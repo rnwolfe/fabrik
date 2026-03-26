@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
@@ -57,7 +58,7 @@ func TestDesignStore_CRUD(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for missing design")
 		}
-		if !isNotFound(err) {
+		if !errors.Is(err, models.ErrNotFound) {
 			t.Errorf("expected ErrNotFound, got %v", err)
 		}
 	})
@@ -68,14 +69,14 @@ func TestDesignStore_CRUD(t *testing.T) {
 			t.Fatalf("Delete: %v", err)
 		}
 		_, err := s.Get(created.ID)
-		if !isNotFound(err) {
+		if !errors.Is(err, models.ErrNotFound) {
 			t.Errorf("expected ErrNotFound after delete, got %v", err)
 		}
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
 		err := s.Delete(999999)
-		if !isNotFound(err) {
+		if !errors.Is(err, models.ErrNotFound) {
 			t.Errorf("expected ErrNotFound, got %v", err)
 		}
 	})
@@ -108,28 +109,4 @@ func TestDesignStore_ConcurrentReads(t *testing.T) {
 	for err := range errCh {
 		t.Errorf("concurrent read error: %v", err)
 	}
-}
-
-// isNotFound reports whether err wraps models.ErrNotFound.
-func isNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	return err.Error() == models.ErrNotFound.Error() ||
-		containsError(err, models.ErrNotFound)
-}
-
-func containsError(err, target error) bool {
-	for err != nil {
-		if err == target {
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		u, ok := err.(unwrapper)
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
 }

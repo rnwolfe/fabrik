@@ -12,7 +12,8 @@ import (
 	"github.com/rnwolfe/fabrik/server/internal/migrations"
 )
 
-// newMigrator opens a fresh in-memory DB and returns a migrator plus a cleanup func.
+// newMigrator opens a fresh in-memory DB and returns a migrator and the underlying *sql.DB.
+// The DB is automatically closed via t.Cleanup when the test finishes.
 func newMigrator(t *testing.T) (*migrate.Migrate, *sql.DB) {
 	t.Helper()
 

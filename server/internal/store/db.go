@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
@@ -16,8 +17,19 @@ import (
 // Open opens (or creates) the SQLite database at path, enables WAL mode and
 // foreign key enforcement, then runs all pending migrations from migrationsFS.
 // It returns the open *sql.DB ready for use.
+//
+// Foreign key enforcement is set via a DSN pragma so that every connection in
+// the pool has it enabled from the moment it is opened, rather than relying on
+// a single PRAGMA statement that is scoped to only the connection it runs on.
 func Open(path string, migrationsFS fs.FS) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	// Append _pragma=foreign_keys(1) to the DSN so modernc.org/sqlite enables
+	// foreign key enforcement on every new connection it opens.
+	sep := "&"
+	if !strings.Contains(path, "?") {
+		sep = "?"
+	}
+	dsn := path + sep + "_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}
@@ -26,12 +38,6 @@ func Open(path string, migrationsFS fs.FS) (*sql.DB, error) {
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("enable WAL: %w", err)
-	}
-
-	// Enforce referential integrity.
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
 	if err := runMigrations(db, migrationsFS); err != nil {
