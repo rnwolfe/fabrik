@@ -1,0 +1,89 @@
+:host {
+  display: block;
+  height: 100dvh;
+}
+
+.shell-container {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+}
+
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  flex-shrink: 0;
+  gap: 0.5rem;
+
+  .app-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: inherit;
+  }
+
+  .toolbar-spacer {
+    flex: 1;
+  }
+
+  .menu-btn {
+    margin-right: 0.25rem;
+  }
+}
+
+.sidenav-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.app-sidenav {
+  width: 240px;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface-container-low);
+
+  mat-nav-list {
+    padding-top: 0.5rem;
+  }
+
+  a[mat-list-item] {
+    border-radius: 0 24px 24px 0;
+    margin-right: 0.75rem;
+    margin-bottom: 2px;
+
+    &.active-link {
+      background-color: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+
+      mat-icon {
+        color: var(--mat-sys-on-secondary-container);
+      }
+    }
+  }
+}
+
+.main-content {
+  background-color: var(--mat-sys-surface);
+  overflow-y: auto;
+}
+
+// Mobile overrides
+@media (max-width: 767px) {
+  .app-sidenav {
+    width: 280px;
+    border-radius: 0;
+    margin-right: 0;
+
+    a[mat-list-item] {
+      border-radius: 0 24px 24px 0;
+    }
+  }
+}
