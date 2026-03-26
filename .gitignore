@@ -1,0 +1,42 @@
+# Build output
+dist/
+bin/
+
+# Go
+server/fabrik
+*.exe
+
+# Node / Angular
+node_modules/
+frontend/.angular/
+frontend/dist/
+.npm
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+
+# Test output
+coverage/
+frontend/coverage/
+test-results/
+playwright-report/
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
