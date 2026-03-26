@@ -6,8 +6,8 @@
 # Documentation: https://github.com/rnwolfe/forge
 
 [project]
-name = "dc-designer"               # Project name (e.g., "myproject")
-repo = "rnwolfe/dc-designer"      # GitHub org/repo (e.g., "org/myproject")
+name = "fabrik"                    # Project name (e.g., "myproject")
+repo = "rnwolfe/fabrik"           # GitHub org/repo (e.g., "org/myproject")
 description = "Design-time tool for planning datacenter network topologies at any scale"
 base_branch = "main"               # Default branch for PRs
 

@@ -1,10 +1,10 @@
-# dc-designer — Vision
+# fabrik — Vision
 
 > A design-time tool for planning datacenter network topologies at any scale — from a few racks to hyperscale — grounded in real hardware platforms with beautiful, metrics-rich visualization.
 
 ## Identity
 
-**What it is**: dc-designer helps datacenter network architects plan Clos fabric topologies in fine detail. Users define racks, select (or create) hardware platforms, wire up front-end and back-end fabrics, and instantly see meaningful metrics like oversubscription ratios, port utilization, power consumption, and aggregate resource capacity — all through an intuitive, richly interactive visual interface. If NetBox captures "what is", dc-designer captures "how it should be".
+**What it is**: fabrik helps datacenter network architects plan Clos fabric topologies in fine detail. Users define racks, select (or create) hardware platforms, wire up front-end and back-end fabrics, and instantly see meaningful metrics like oversubscription ratios, port utilization, power consumption, and aggregate resource capacity — all through an intuitive, richly interactive visual interface. If NetBox captures "what is", fabrik captures "how it should be".
 
 **Who it's for**: Datacenter network architects designing high-scale Clos fabrics — including GPU-heavy AI/ML clusters with back-end RDMA networks — who need to root their designs in the realities of real network, server, and storage platforms and quickly evaluate design tradeoffs visually rather than in spreadsheets.
 
@@ -26,11 +26,11 @@
 
 7. **Progressive disclosure**: Simple designs stay simple. You don't need to specify every detail upfront. Start with a topology sketch, then layer in platform choices, cabling, power, etc. as the design matures.
 
-8. **Export-oriented**: The design isn't trapped in the tool. Clean export to design docs, topology diagrams, rack elevations, BOMs, and structured data that can feed NetBox, ordering systems, or other dc-designer instances.
+8. **Export-oriented**: The design isn't trapped in the tool. Clean export to design docs, topology diagrams, rack elevations, BOMs, and structured data that can feed NetBox, ordering systems, or other fabrik instances.
 
 ## Out of Scope
 
-- **Not a NetBox replacement.** dc-designer does not track live inventory or operational state.
+- **Not a NetBox replacement.** fabrik does not track live inventory or operational state.
 - **Not a monitoring tool.** No runtime telemetry, alerting, or traffic analysis.
 - **Not a config generator.** It does not produce switch configs, Ansible playbooks, or deployment artifacts.
 - **Design artifacts only.** Output is design documentation, topologies, part lists, and rack elevations — not operational tooling.
@@ -49,7 +49,7 @@ Helpful and guiding — the tool should drive users toward good design choices t
 
 ### Logical vs. Physical Racks
 
-High-power GPU racks may be "ToR-less" — a single leaf pair serves multiple physical racks. For example, 8 physical racks housing GPUs may appear as a single logical group since they share one leaf pair. dc-designer models both the physical reality (8 racks) and the logical grouping (1 leaf pair serving the group).
+High-power GPU racks may be "ToR-less" — a single leaf pair serves multiple physical racks. For example, 8 physical racks housing GPUs may appear as a single logical group since they share one leaf pair. fabrik models both the physical reality (8 racks) and the logical grouping (1 leaf pair serving the group).
 
 ### Management Network
 
@@ -93,9 +93,9 @@ Aggregate resource capacity is a first-class metric: total vCPU, RAM, storage, a
 
 ## Prior Art & Constraints
 
-- **Must be a web app** that runs completely locally (e.g., `npx dc-designer run`) and works offline.
+- **Must be a web app** that runs completely locally (e.g., `npx fabrik run`) and works offline.
 - **Local-first storage**: All state saved locally (SQLite or similar). No cloud dependency.
-- **Portable designs**: Export/import between dc-designer instances — ideally via a base64-encoded shareable link that imports in one click.
+- **Portable designs**: Export/import between fabrik instances — ideally via a base64-encoded shareable link that imports in one click.
 - **Framework choice**: Angular is preferred over React to enable potential internal use at Google (forked to work within their tooling). This is a strategic constraint.
 - **UI kit**: Latest Material Design components (Angular Material).
 - **Initial hardware support**: Dell servers and Cisco Nexus 9300 series switches as the first vendor catalog entries.
