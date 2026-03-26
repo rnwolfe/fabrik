@@ -1,0 +1,55 @@
+<!-- Loading state -->
+@if (loading()) {
+  <div class="article-loading">
+    <mat-spinner diameter="32"></mat-spinner>
+  </div>
+}
+
+<!-- Not found state -->
+@if (!loading() && notFound()) {
+  <div class="article-not-found">
+    <mat-icon>article</mat-icon>
+    <h3>Article not found</h3>
+    <p>The article <code>{{ articlePath }}</code> could not be found.</p>
+    <p>Try searching for a related topic in the table of contents.</p>
+  </div>
+}
+
+<!-- Error state -->
+@if (!loading() && error()) {
+  <div class="article-error">
+    <mat-icon color="warn">error_outline</mat-icon>
+    <p>{{ error() }}</p>
+  </div>
+}
+
+<!-- Article content -->
+@if (!loading() && !notFound() && !error() && article()) {
+  <article class="article" [class.compact]="compact">
+    <!-- Article header -->
+    <header class="article-header">
+      <div class="article-meta">
+        <span class="article-category">{{ formatCategory(article()!.category) }}</span>
+      </div>
+      <h1 class="article-title">{{ article()!.title }}</h1>
+      @if (article()!.tags.length > 0) {
+        <div class="article-tags">
+          <mat-chip-set aria-label="Article tags">
+            @for (tag of article()!.tags; track tag) {
+              <mat-chip>{{ tag }}</mat-chip>
+            }
+          </mat-chip-set>
+        </div>
+      }
+    </header>
+
+    <!-- Rendered Markdown content -->
+    <div
+      #contentContainer
+      class="article-body markdown-body"
+      [innerHTML]="renderedHtml()"
+      role="main"
+      aria-label="Article content"
+    ></div>
+  </article>
+}
