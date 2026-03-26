@@ -6,26 +6,26 @@
 # Documentation: https://github.com/rnwolfe/forge
 
 [project]
-name = ""                          # Project name (e.g., "myproject")
-repo = ""                          # GitHub org/repo (e.g., "org/myproject")
-description = ""                   # One-line project description
+name = "dc-designer"               # Project name (e.g., "myproject")
+repo = "rnwolfe/dc-designer"      # GitHub org/repo (e.g., "org/myproject")
+description = "Design-time tool for planning datacenter network topologies at any scale"
 base_branch = "main"               # Default branch for PRs
 
 [stack]
-language = ""                      # Primary language: go, node, python, rust, java, etc.
-build_command = ""                 # Build command (e.g., "make build", "npm run build")
-test_command = ""                  # Test command (e.g., "make test", "npm test")
-lint_command = ""                  # Lint command (optional, e.g., "go vet ./...", "npm run lint")
-release_tool = "none"              # Release tool: goreleaser, npm, cargo, pypi, docker, none
+language = "node"                  # Primary language: go, node, python, rust, java, etc.
+build_command = "npm run build"    # Build command (e.g., "make build", "npm run build")
+test_command = "npm test"          # Test command (e.g., "make test", "npm test")
+lint_command = "npm run lint"      # Lint command (optional, e.g., "go vet ./...", "npm run lint")
+release_tool = "npm"               # Release tool: goreleaser, npm, cargo, pypi, docker, none
 
 [gating]
-human_merge_required = true        # Require human to merge PRs (Level 1-2)
-auto_merge_after_review = false    # Auto-merge after all reviews pass (Level 2+)
+human_merge_required = false        # Require human to merge PRs (Level 1-2)
+auto_merge_after_review = true     # Auto-merge after all reviews pass (Level 2+)
 copilot_review = true              # Enable Copilot review phase
 claude_review = true               # Enable Claude review phase
 max_copilot_iterations = 3         # Max Copilot fix cycles before escalating to Claude
 max_claude_iterations = 1          # Max Claude fix cycles
-require_human_review_for = ["*"]   # Glob patterns requiring human review; ["*"] = everything, [] = nothing
+require_human_review_for = []      # Glob patterns requiring human review; ["*"] = everything, [] = nothing
 
 [dispatch]
 cron_schedule = "0 */1 * * *"      # How often to check for ready issues (cron expression)
@@ -40,8 +40,8 @@ implement_timeout_minutes = 60     # Timeout for implementation workflow
 review_timeout_minutes = 45        # Timeout for review-fix workflow
 
 [trust]
-trusted_users = []                 # GitHub logins that can trigger autodev via backlog/ready label
-human_reviewer = ""                # GitHub login for CODEOWNERS (auto-added by GitHub, removed from autodev PRs)
+trusted_users = ["rnwolfe"]        # GitHub logins that can trigger autodev via backlog/ready label
+human_reviewer = "rnwolfe"         # GitHub login for CODEOWNERS (auto-added by GitHub, removed from autodev PRs)
 
 [commits]
 convention = "conventional"    # Commit message format enforced by commitlint
