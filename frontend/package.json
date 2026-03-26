@@ -21,6 +21,7 @@
     "@angular/material": "^21.2.4",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
+    "@testing-library/user-event": "^14.6.1",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.43",
     "marked": "^16.4.2",
