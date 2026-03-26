@@ -28,6 +28,8 @@
 
 8. **Export-oriented**: The design isn't trapped in the tool. Clean export to design docs, topology diagrams, rack elevations, BOMs, and structured data that can feed NetBox, ordering systems, or other fabrik instances.
 
+9. **Documentation as product**: fabrik is not just a tool — it is an education platform. Every concept in the UI links to embedded documentation that explains not only how to use the feature, but *why* the underlying datacenter design principle matters. The goal is for fabrik's documentation to become the world's foremost open reference on datacenter infrastructure design.
+
 ## Out of Scope
 
 - **Not a NetBox replacement.** fabrik does not track live inventory or operational state.
@@ -59,6 +61,10 @@ Out-of-band management networks with in-rack management switches are modeled exp
 
 Aggregate resource capacity is a first-class metric: total vCPU, RAM, storage, and GPU count — viewable at every level of the hierarchy (rack, block, super-block, site). This gives architects an immediate answer to "how much compute does this design provide?"
 
+### Embedded Knowledge Base
+
+Every concept in fabrik — oversubscription, Clos stages, ECMP, RDMA fabrics, power budgets, rack design — links to embedded documentation that lives inside the app. This is not a help menu; it is a comprehensive, structured reference on datacenter infrastructure design. Contextual help buttons throughout the UI link directly to the relevant section. The knowledge base ships with the app and works offline, just like the rest of fabrik.
+
 ## Roadmap
 
 ### Phase 1 — Foundation
@@ -76,6 +82,7 @@ Aggregate resource capacity is a first-class metric: total vCPU, RAM, storage, a
 - Export design summary and artifacts
 - Initial hardware catalog: Dell servers, Cisco Nexus 9300 switches
 - UI built on latest Material Design components
+- Embedded knowledge base with contextual help linking UI concepts to datacenter design documentation
 
 ### Phase 2 — Growth
 - Rack elevation views
@@ -90,12 +97,14 @@ Aggregate resource capacity is a first-class metric: total vCPU, RAM, storage, a
 - NetBox export integration
 - Advanced constraint modeling (cable reach, cooling zones)
 - Community-shared hardware catalogs and rack templates
+- Knowledge base grows into the definitive open reference on datacenter infrastructure design
 
 ## Prior Art & Constraints
 
 - **Must be a web app** that runs completely locally (e.g., `npx fabrik run`) and works offline.
 - **Local-first storage**: All state saved locally (SQLite or similar). No cloud dependency.
 - **Portable designs**: Export/import between fabrik instances — ideally via a base64-encoded shareable link that imports in one click.
-- **Framework choice**: Angular is preferred over React to enable potential internal use at Google (forked to work within their tooling). This is a strategic constraint.
-- **UI kit**: Latest Material Design components (Angular Material).
+- **Frontend**: Angular with Angular Material (Material Design components). Angular chosen to enable potential internal use at Google (forked to work within their tooling). This is a strategic constraint.
+- **Backend**: Go. Compiles to a single binary, serves the Angular frontend as static files, and aligns with Google's internal ecosystem. SQLite for local storage with migration tooling.
+- **Distribution**: npm package wrapping pre-compiled Go binaries per platform. `npx fabrik run` extracts the right binary and starts the server.
 - **Initial hardware support**: Dell servers and Cisco Nexus 9300 series switches as the first vendor catalog entries.

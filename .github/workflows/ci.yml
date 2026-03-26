@@ -18,7 +18,24 @@ jobs:
         with:
           configFile: .commitlintrc.json
 
-  test:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+      - name: Lint
+        working-directory: server
+        run: go vet ./...
+      - name: Test
+        working-directory: server
+        run: go test ./...
+      - name: Build
+        working-directory: server
+        run: go build ./cmd/fabrik
+
+  frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +43,16 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-      - run: npm ci
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci
       - name: Lint
+        working-directory: frontend
         run: npm run lint
       - name: Test
-        run: npm test
+        working-directory: frontend
+        run: npm test -- --watch=false
       - name: Build
+        working-directory: frontend
         run: npm run build

@@ -12,10 +12,10 @@ description = "Design-time tool for planning datacenter network topologies at an
 base_branch = "main"               # Default branch for PRs
 
 [stack]
-language = "node"                  # Primary language: go, node, python, rust, java, etc.
-build_command = "npm run build"    # Build command (e.g., "make build", "npm run build")
-test_command = "npm test"          # Test command (e.g., "make test", "npm test")
-lint_command = "npm run lint"      # Lint command (optional, e.g., "go vet ./...", "npm run lint")
+language = "go+node"               # Primary language: go, node, python, rust, java, etc.
+build_command = "make build"       # Build command (e.g., "make build", "npm run build")
+test_command = "make test"         # Test command (e.g., "make test", "npm test")
+lint_command = "make lint"         # Lint command (optional, e.g., "go vet ./...", "npm run lint")
 release_tool = "npm"               # Release tool: goreleaser, npm, cargo, pypi, docker, none
 
 [gating]
