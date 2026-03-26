@@ -2,9 +2,6 @@
 dist/
 bin/
 
-# Generated: knowledge docs copied for embedding
-server/cmd/fabrik/docs/
-
 # Go
 server/fabrik
 *.exe
