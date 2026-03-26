@@ -1,39 +1,74 @@
-// Include theming for Angular Material with `mat.theme()`.
-// This Sass mixin will define CSS variables that are used for styling Angular Material
-// components according to the Material 3 design spec.
-// Learn more about theming and how to use it for your application's
-// custom components at https://material.angular.dev/guide/theming
+// fabrik — Angular Material M3 theme
+// Primary: deep blue/slate (#1e293b family)
+// Accent/Secondary: teal (#0d9488 family)
 @use '@angular/material' as mat;
 
+// Apply M3 theme using cyan (closest built-in to teal) as primary and
+// blue as tertiary. CSS custom properties allow runtime re-theming.
 html {
   height: 100%;
   @include mat.theme(
     (
       color: (
-        primary: mat.$azure-palette,
+        primary: mat.$cyan-palette,
         tertiary: mat.$blue-palette,
       ),
       typography: Roboto,
       density: 0,
     )
   );
+
+  // fabrik brand CSS custom properties
+  --fabrik-primary: #0d9488;
+  --fabrik-primary-dark: #0f766e;
+  --fabrik-surface: #1e293b;
+  --fabrik-surface-variant: #334155;
+  --fabrik-on-surface: #f1f5f9;
+
+  // Map fabrik brand colors to Angular Material system tokens so Material
+  // components use the brand palette instead of the default theme palette.
+  --mat-sys-primary: var(--fabrik-primary);
+  --mat-sys-on-primary: #ffffff;
+  --mat-sys-primary-container: #ccfbf1;
+  --mat-sys-on-primary-container: #003d35;
+  --mat-sys-secondary: var(--fabrik-surface-variant);
+  --mat-sys-on-secondary: #ffffff;
+  --mat-sys-secondary-container: #cbd5e1;
+  --mat-sys-on-secondary-container: #0f172a;
+  --mat-sys-surface: #ffffff;
+  --mat-sys-on-surface: #1e293b;
+  --mat-sys-surface-container-low: #f8fafc;
+  --mat-sys-outline-variant: #e2e8f0;
 }
 
 body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
+  // Default light; ThemeService sets data-theme and color-scheme at runtime
   color-scheme: light;
-
-  // Set a default background, font and text colors for the application using
-  // Angular Material's system-level CSS variables. Learn more about these
-  // variables at https://material.angular.dev/guide/system-variables
   background-color: var(--mat-sys-surface);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
-
-  // Reset the user agent margin.
   margin: 0;
   height: 100%;
 }
-/* You can add global styles to this file, and also import other style files */
+
+// Dark mode — activated by ThemeService via data-theme="dark" on <html>
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  // Override Material system tokens for dark mode using brand palette
+  --mat-sys-primary: #2dd4bf;
+  --mat-sys-on-primary: #003731;
+  --mat-sys-primary-container: #004f45;
+  --mat-sys-on-primary-container: #a7f3d0;
+  --mat-sys-secondary: #94a3b8;
+  --mat-sys-on-secondary: #1e293b;
+  --mat-sys-secondary-container: #334155;
+  --mat-sys-on-secondary-container: #e2e8f0;
+  --mat-sys-surface: #0f172a;
+  --mat-sys-on-surface: #e2e8f0;
+  --mat-sys-surface-container-low: #1e293b;
+  --mat-sys-outline-variant: #334155;
+}
+
+// Ensure no flash of unstyled content: inline script in index.html sets
+// data-theme before Angular bootstraps (see index.html)
