@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -55,14 +54,21 @@ func (h *KnowledgeHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reject paths containing ".." segments or starting with "/" to prevent
+	// directory traversal. fs.ValidPath also enforces the io/fs path contract.
+	if strings.HasPrefix(rawPath, "/") || strings.Contains(rawPath, "..") || !fs.ValidPath(rawPath) {
+		writeError(w, http.StatusBadRequest, "invalid article path")
+		return
+	}
+
 	article, err := h.loader.LoadArticle(rawPath)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			writeError(w, http.StatusNotFound, "article not found")
-			return
-		}
 		slog.Error("load knowledge article", "err", err, "path", rawPath)
 		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if article == nil {
+		writeError(w, http.StatusNotFound, "article not found")
 		return
 	}
 

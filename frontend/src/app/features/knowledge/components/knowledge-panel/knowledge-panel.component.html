@@ -11,7 +11,8 @@
 <aside
   class="knowledge-panel"
   [@panelSlide]="isOpen() ? 'open' : 'closed'"
-  [attr.aria-hidden]="!isOpen()"
+  [attr.aria-hidden]="!isOpen() || null"
+  [attr.inert]="!isOpen() || null"
   role="complementary"
   aria-label="Contextual help panel"
 >

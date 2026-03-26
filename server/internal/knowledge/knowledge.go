@@ -5,6 +5,8 @@ package knowledge
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"path"
@@ -77,10 +79,17 @@ func (l *Loader) LoadIndex() (*Index, error) {
 }
 
 // LoadArticle loads a single article by its path (without .md extension).
-// Returns nil if the article is not found.
+// Returns (nil, nil) if the article is not found.
 func (l *Loader) LoadArticle(articlePath string) (*Article, error) {
 	filePath := articlePath + ".md"
-	return l.loadArticle(filePath, true)
+	article, err := l.loadArticle(filePath, true)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return article, nil
 }
 
 // loadArticle reads the file at filePath and parses its frontmatter.
@@ -96,8 +105,13 @@ func (l *Loader) loadArticle(filePath string, includeContent bool) (*Article, er
 	// Derive the article path: strip leading directory prefix and .md extension.
 	article.Path = strings.TrimSuffix(filePath, ".md")
 
-	fm, body := splitFrontmatter(string(data))
-	parseFrontmatter(fm, article)
+	fm, body, err := splitFrontmatter(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("split frontmatter %s: %w", filePath, err)
+	}
+	if err := parseFrontmatter(fm, article); err != nil {
+		return nil, fmt.Errorf("parse frontmatter %s: %w", filePath, err)
+	}
 
 	// Fallback title: filename stem (last path segment, underscores → spaces).
 	if article.Title == "" {
@@ -119,17 +133,20 @@ func (l *Loader) loadArticle(filePath string, includeContent bool) (*Article, er
 }
 
 // splitFrontmatter splits YAML frontmatter (delimited by ---) from body text.
-// Returns ("", full content) if no frontmatter is present.
-func splitFrontmatter(content string) (frontmatter, body string) {
+// Returns ("", full content, nil) if no frontmatter is present.
+func splitFrontmatter(content string) (frontmatter, body string, err error) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
 
 	var lines []string
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return "", "", fmt.Errorf("scanning content: %w", scanErr)
+	}
 
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
-		return "", content
+		return "", content, nil
 	}
 
 	// Find closing ---
@@ -142,7 +159,7 @@ func splitFrontmatter(content string) (frontmatter, body string) {
 	}
 
 	if end == -1 {
-		return "", content
+		return "", content, nil
 	}
 
 	fm := strings.Join(lines[1:end], "\n")
@@ -150,12 +167,12 @@ func splitFrontmatter(content string) (frontmatter, body string) {
 	if strings.HasPrefix(body, "\n") {
 		body = body[1:]
 	}
-	return fm, body
+	return fm, body, nil
 }
 
 // parseFrontmatter parses a minimal YAML subset (key: value, key: [a, b, c])
 // into the article metadata fields.
-func parseFrontmatter(fm string, a *Article) {
+func parseFrontmatter(fm string, a *Article) error {
 	scanner := bufio.NewScanner(strings.NewReader(fm))
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -175,9 +192,14 @@ func parseFrontmatter(fm string, a *Article) {
 			a.Tags = parseTags(val)
 		}
 	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return fmt.Errorf("scanning frontmatter: %w", scanErr)
+	}
+	return nil
 }
 
 // parseTags parses an inline YAML sequence: [tag1, tag2, tag3]
+// Surrounding quotes on individual tags are stripped (e.g. ["clos", "fabric"]).
 func parseTags(s string) []string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "[")
@@ -186,6 +208,7 @@ func parseTags(s string) []string {
 	var tags []string
 	for _, p := range parts {
 		t := strings.TrimSpace(p)
+		t = strings.Trim(t, "'\"")
 		if t != "" {
 			tags = append(tags, t)
 		}

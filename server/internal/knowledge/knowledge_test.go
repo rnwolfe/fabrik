@@ -107,9 +107,12 @@ func TestLoadArticle_NoFrontmatter(t *testing.T) {
 
 func TestLoadArticle_NotFound(t *testing.T) {
 	loader := knowledge.NewLoader(newTestFS())
-	_, err := loader.LoadArticle("does/not/exist")
-	if err == nil {
-		t.Error("expected error for missing article")
+	a, err := loader.LoadArticle("does/not/exist")
+	if err != nil {
+		t.Fatalf("LoadArticle not-found should return nil error, got: %v", err)
+	}
+	if a != nil {
+		t.Errorf("LoadArticle not-found should return nil article, got: %+v", a)
 	}
 }
 
@@ -121,5 +124,32 @@ func TestLoadArticle_Path(t *testing.T) {
 	}
 	if a.Path != "networking/ecmp" {
 		t.Errorf("path: got %q, want %q", a.Path, "networking/ecmp")
+	}
+}
+
+func TestLoadArticle_QuotedTags(t *testing.T) {
+	fsys := fstest.MapFS{
+		"test.md": {
+			Data: []byte(`---
+title: Test
+tags: ["clos", "fabric"]
+---
+
+Body.
+`),
+		},
+	}
+	loader := knowledge.NewLoader(fsys)
+	a, err := loader.LoadArticle("test")
+	if err != nil {
+		t.Fatalf("LoadArticle: %v", err)
+	}
+	if len(a.Tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d: %v", len(a.Tags), a.Tags)
+	}
+	for _, tag := range a.Tags {
+		if len(tag) >= 2 && (tag[0] == '"' || tag[0] == '\'') {
+			t.Errorf("tag %q still has surrounding quotes after parsing", tag)
+		}
 	}
 }

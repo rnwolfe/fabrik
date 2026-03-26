@@ -2,7 +2,6 @@ package handlers_test
 
 import (
 	"encoding/json"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -111,11 +110,34 @@ func TestKnowledgeHandler_Get_MissingPath(t *testing.T) {
 	}
 }
 
+func TestKnowledgeHandler_Get_InvalidPath(t *testing.T) {
+	h := handlers.NewKnowledgeHandler(newTestKnowledgeLoader())
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"path traversal", "../etc/passwd"},
+		{"absolute path", "/etc/passwd"},
+		{"double dot segment", "valid/../etc/passwd"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/knowledge/"+tt.path, nil)
+			req.SetPathValue("path", tt.path)
+			rec := httptest.NewRecorder()
+			h.Get(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("path %q: status got %d, want %d", tt.path, rec.Code, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
 // ensure knowledge.Loader satisfies KnowledgeLoader at compile time
 var _ interface {
 	LoadIndex() (*knowledge.Index, error)
 	LoadArticle(string) (*knowledge.Article, error)
 } = (*knowledge.Loader)(nil)
-
-// ensure fs.ErrNotExist is used properly
-var _ = fs.ErrNotExist
