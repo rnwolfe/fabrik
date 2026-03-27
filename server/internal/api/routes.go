@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes on mux.
-func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler) {
+func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler) {
 	// Design CRUD
 	mux.HandleFunc("POST /api/designs", designs.Create)
 	mux.HandleFunc("GET /api/designs", designs.List)
@@ -46,4 +46,12 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("PUT /api/racks/{rack_id}/devices/{device_id}", racks.MoveDeviceInRack)
 	mux.HandleFunc("PUT /api/racks/{rack_id}/devices/{device_id}/move", racks.MoveDeviceCrossRack)
 	mux.HandleFunc("DELETE /api/racks/{rack_id}/devices/{device_id}", racks.RemoveDevice)
+
+	// Fabric designer
+	mux.HandleFunc("POST /api/fabrics/preview", fabrics.Preview)
+	mux.HandleFunc("POST /api/fabrics", fabrics.Create)
+	mux.HandleFunc("GET /api/fabrics", fabrics.List)
+	mux.HandleFunc("GET /api/fabrics/{id}", fabrics.Get)
+	mux.HandleFunc("PUT /api/fabrics/{id}", fabrics.Update)
+	mux.HandleFunc("DELETE /api/fabrics/{id}", fabrics.Delete)
 }
