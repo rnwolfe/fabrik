@@ -50,9 +50,16 @@ func main() {
 	rackSvc := service.NewRackService(rackTypeStore, rackStore)
 	rackHandler := handlers.NewRackHandler(rackSvc)
 
+<<<<<<< HEAD
 	fabricStore := store.NewFabricStore(db)
 	fabricSvc := service.NewFabricService(fabricStore)
 	fabricHandler := handlers.NewFabricHandler(fabricSvc)
+=======
+	// Wire up blocks and block aggregation
+	blockStore := store.NewBlockStore(db)
+	blockSvc := service.NewBlockService(blockStore)
+	blockHandler := handlers.NewBlockHandler(blockSvc)
+>>>>>>> ab59967 (feat: block aggregation and rack-to-aggregation connectivity)
 
 	// Wire up knowledge base
 	knowledgeSub, err := fs.Sub(docsFS, "docs/knowledge")
@@ -72,7 +79,11 @@ func main() {
 	})
 
 	// Register domain routes
+<<<<<<< HEAD
 	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler)
+=======
+	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, blockHandler)
+>>>>>>> ab59967 (feat: block aggregation and rack-to-aggregation connectivity)
 
 	addr := ":8080"
 	if port := os.Getenv("FABRIK_PORT"); port != "" {

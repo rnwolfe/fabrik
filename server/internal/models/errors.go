@@ -25,4 +25,10 @@ var (
 
 	// ErrConflict is returned when deleting a resource that is referenced by others.
 	ErrConflict = errors.New("conflict")
+
+	// ErrAggPortsFull is returned when an aggregation switch has no free ports for a new rack.
+	ErrAggPortsFull = errors.New("aggregation ports full")
+
+	// ErrAggModelDownsize is returned when changing an agg model would orphan existing connections.
+	ErrAggModelDownsize = errors.New("aggregation model downsize would orphan connections")
 )

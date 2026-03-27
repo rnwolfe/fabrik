@@ -1,4 +1,5 @@
 export * from './block';
+export * from './block-aggregation';
 export * from './design';
 export * from './device';
 export * from './device-model';
