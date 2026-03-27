@@ -65,6 +65,11 @@ func main() {
 	capacitySvc := service.NewCapacityService(capacityStore)
 	capacityHandler := handlers.NewCapacityHandler(capacitySvc)
 
+	// Wire up metrics
+	metricsStore := store.NewMetricsStore(db)
+	metricsSvc := service.NewMetricsService(metricsStore)
+	metricsHandler := handlers.NewMetricsHandler(metricsSvc)
+
 	// Wire up knowledge base
 	knowledgeSub, err := fs.Sub(docsFS, "docs/knowledge")
 	if err != nil {
@@ -82,7 +87,7 @@ func main() {
 	})
 
 	// Register domain routes
-	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler, managementHandler, capacityHandler)
+	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler, managementHandler, capacityHandler, metricsHandler)
 
 	addr := ":8080"
 	if port := os.Getenv("FABRIK_PORT"); port != "" {
