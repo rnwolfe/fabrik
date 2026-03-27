@@ -341,7 +341,7 @@ func parsePlane(w http.ResponseWriter, s string) (models.NetworkPlane, bool) {
 	case string(models.NetworkPlaneFrontEnd), string(models.NetworkPlaneManagement):
 		return models.NetworkPlane(s), true
 	default:
-		writeError(w, http.StatusBadRequest, "plane must be 'frontend' or 'management'")
+		writeError(w, http.StatusBadRequest, "plane must be 'front_end' or 'management'")
 		return "", false
 	}
 }

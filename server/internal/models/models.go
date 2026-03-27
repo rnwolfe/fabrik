@@ -106,28 +106,6 @@ const (
 	DeviceRoleManagementAgg DeviceRole = "management_agg"
 )
 
-// NetworkPlane distinguishes the front-end fabric from the management plane.
-type NetworkPlane string
-
-const (
-	PlaneFrontEnd  NetworkPlane = "front_end"
-	PlaneManagement NetworkPlane = "management"
-)
-
-// BlockAggregation represents a block-level aggregation switch assignment for
-// a given network plane (front_end or management).
-type BlockAggregation struct {
-	ID            int64        `json:"id"`
-	BlockID       int64        `json:"block_id"`
-	Plane         NetworkPlane `json:"plane"`
-	DeviceID      *int64       `json:"device_id"`
-	MaxPorts      int          `json:"max_ports"`
-	UsedPorts     int          `json:"used_ports"`
-	Description   string       `json:"description"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
-}
-
 // Device represents a physical network device installed in a rack.
 type Device struct {
 	ID            int64      `json:"id"`
@@ -178,13 +156,17 @@ type DeviceModel struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-
-// NetworkPlane enumerates the network plane for block aggregation assignments.
+// NetworkPlane distinguishes the front-end fabric from the management plane.
 type NetworkPlane string
 
 const (
-	NetworkPlaneFrontEnd    NetworkPlane = "frontend"
-	NetworkPlaneManagement  NetworkPlane = "management"
+	// PlaneFrontEnd / NetworkPlaneFrontEnd: the front-end (leaf/spine) fabric plane.
+	PlaneFrontEnd       NetworkPlane = "front_end"
+	NetworkPlaneFrontEnd NetworkPlane = "front_end"
+
+	// PlaneManagement / NetworkPlaneManagement: the management network plane.
+	PlaneManagement       NetworkPlane = "management"
+	NetworkPlaneManagement NetworkPlane = "management"
 )
 
 // BlockAggregation represents an aggregation switch model assigned to a block for a given plane.

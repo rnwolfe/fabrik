@@ -20,17 +20,15 @@ func newFakeMgmtSvc() *fakeManagementService {
 	return &fakeManagementService{aggs: make(map[int64]*models.BlockAggregation)}
 }
 
-func (s *fakeManagementService) SetManagementAgg(blockID int64, deviceID *int64, maxPorts int, description string) (*models.BlockAggregation, error) {
-	if maxPorts < 0 {
+func (s *fakeManagementService) SetManagementAgg(blockID int64, deviceModelID int64) (*models.BlockAggregation, error) {
+	if deviceModelID <= 0 {
 		return nil, models.ErrConstraintViolation
 	}
 	agg := &models.BlockAggregation{
-		ID:          1,
-		BlockID:     blockID,
-		Plane:       models.PlaneManagement,
-		DeviceID:    deviceID,
-		MaxPorts:    maxPorts,
-		Description: description,
+		ID:            1,
+		BlockID:       blockID,
+		Plane:         models.PlaneManagement,
+		DeviceModelID: deviceModelID,
 	}
 	s.aggs[blockID] = agg
 	return agg, nil
@@ -88,8 +86,7 @@ func TestManagementHandler_SetManagementAgg(t *testing.T) {
 	h := handlers.NewManagementHandler(svc)
 
 	body := map[string]interface{}{
-		"device_id": nil,
-		"max_ports": 48,
+		"device_model_id": 5,
 	}
 	r := setManagementPathValue(newManagementRequest(http.MethodPut, "/api/blocks/1/management-agg", body), "block_id", "1")
 	w := httptest.NewRecorder()
@@ -105,8 +102,8 @@ func TestManagementHandler_SetManagementAgg(t *testing.T) {
 	if agg.BlockID != 1 {
 		t.Errorf("BlockID = %d, want 1", agg.BlockID)
 	}
-	if agg.MaxPorts != 48 {
-		t.Errorf("MaxPorts = %d, want 48", agg.MaxPorts)
+	if agg.DeviceModelID != 5 {
+		t.Errorf("DeviceModelID = %d, want 5", agg.DeviceModelID)
 	}
 }
 
@@ -128,7 +125,7 @@ func TestManagementHandler_GetManagementAgg(t *testing.T) {
 	h := handlers.NewManagementHandler(svc)
 
 	// Set an agg first.
-	svc.aggs[2] = &models.BlockAggregation{ID: 1, BlockID: 2, Plane: models.PlaneManagement, MaxPorts: 24}
+	svc.aggs[2] = &models.BlockAggregation{ID: 1, BlockID: 2, Plane: models.PlaneManagement, DeviceModelID: 10}
 
 	r := setManagementPathValue(newManagementRequest(http.MethodGet, "/api/blocks/2/management-agg", nil), "block_id", "2")
 	w := httptest.NewRecorder()
@@ -156,7 +153,7 @@ func TestManagementHandler_RemoveManagementAgg(t *testing.T) {
 	svc := newFakeMgmtSvc()
 	h := handlers.NewManagementHandler(svc)
 
-	svc.aggs[3] = &models.BlockAggregation{ID: 1, BlockID: 3, Plane: models.PlaneManagement}
+	svc.aggs[3] = &models.BlockAggregation{ID: 1, BlockID: 3, Plane: models.PlaneManagement, DeviceModelID: 7}
 
 	r := setManagementPathValue(newManagementRequest(http.MethodDelete, "/api/blocks/3/management-agg", nil), "block_id", "3")
 	w := httptest.NewRecorder()
@@ -184,7 +181,7 @@ func TestManagementHandler_ListBlockAggregations(t *testing.T) {
 	svc := newFakeMgmtSvc()
 	h := handlers.NewManagementHandler(svc)
 
-	svc.aggs[4] = &models.BlockAggregation{ID: 1, BlockID: 4, Plane: models.PlaneManagement}
+	svc.aggs[4] = &models.BlockAggregation{ID: 1, BlockID: 4, Plane: models.PlaneManagement, DeviceModelID: 3}
 
 	r := setManagementPathValue(newManagementRequest(http.MethodGet, "/api/blocks/4/aggregations", nil), "block_id", "4")
 	w := httptest.NewRecorder()

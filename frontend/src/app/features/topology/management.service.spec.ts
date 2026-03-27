@@ -3,16 +3,13 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideHttpClient } from '@angular/common/http';
 
 import { ManagementService } from './management.service';
-import { BlockAggregation } from '../../models/block';
+import { BlockAggregation } from '../../models';
 
 const mockAgg: BlockAggregation = {
   id: 1,
   block_id: 10,
   plane: 'management',
-  device_id: null,
-  max_ports: 48,
-  used_ports: 0,
-  description: '',
+  device_model_id: 5,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
@@ -38,7 +35,7 @@ describe('ManagementService', () => {
   });
 
   it('setManagementAgg should PUT to the correct endpoint', () => {
-    service.setManagementAgg(10, { max_ports: 48 }).subscribe(agg => {
+    service.setManagementAgg(10, { device_model_id: 5 }).subscribe(agg => {
       expect(agg).toEqual(mockAgg);
     });
     const req = httpMock.expectOne('/api/blocks/10/management-agg');

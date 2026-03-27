@@ -1,6 +1,4 @@
--- Reverse management network migration.
-
-DROP TABLE IF EXISTS block_aggregations;
+-- Reverse management network migration: remove management device roles.
 
 -- Recreate devices table without management roles.
 CREATE TABLE IF NOT EXISTS devices_old (

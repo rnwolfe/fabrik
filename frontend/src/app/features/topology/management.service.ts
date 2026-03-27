@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-import { BlockAggregation, SetManagementAggRequest } from '../../models/block';
+import { BlockAggregation, SetManagementAggRequest } from '../../models';
 
 @Injectable({ providedIn: 'root' })
 export class ManagementService {

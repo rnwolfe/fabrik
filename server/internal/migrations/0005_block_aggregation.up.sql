@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS block_aggregations (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     block_id         INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
-    plane            TEXT    NOT NULL CHECK (plane IN ('frontend', 'management')),
+    plane            TEXT    NOT NULL CHECK (plane IN ('front_end', 'management')),
     device_model_id  INTEGER NOT NULL REFERENCES device_models(id),
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

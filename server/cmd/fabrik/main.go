@@ -42,9 +42,9 @@ func main() {
 	deviceModelSvc := service.NewDeviceModelService(deviceModelStore)
 	deviceModelHandler := handlers.NewDeviceModelHandler(deviceModelSvc)
 
-	// Wire up management service before rack service so it can be injected
-	blockAggStore := store.NewBlockAggregationStore(db)
-	managementSvc := service.NewManagementService(blockAggStore)
+	// Wire up blocks and block aggregation (blockStore satisfies both BlockRepository and ManagementAggRepository).
+	blockStore := store.NewBlockStore(db)
+	managementSvc := service.NewManagementService(blockStore)
 	managementHandler := handlers.NewManagementHandler(managementSvc)
 
 	// Wire up rack types and racks; inject management allocator for management_tor placement
@@ -57,8 +57,6 @@ func main() {
 	fabricSvc := service.NewFabricService(fabricStore)
 	fabricHandler := handlers.NewFabricHandler(fabricSvc)
 
-	// Wire up blocks and block aggregation
-	blockStore := store.NewBlockStore(db)
 	blockSvc := service.NewBlockService(blockStore)
 	blockHandler := handlers.NewBlockHandler(blockSvc)
 

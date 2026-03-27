@@ -11,7 +11,7 @@ import (
 
 // ManagementService is the business logic interface required by ManagementHandler.
 type ManagementService interface {
-	SetManagementAgg(blockID int64, deviceID *int64, maxPorts int, description string) (*models.BlockAggregation, error)
+	SetManagementAgg(blockID int64, deviceModelID int64) (*models.BlockAggregation, error)
 	GetManagementAgg(blockID int64) (*models.BlockAggregation, error)
 	RemoveManagementAgg(blockID int64) error
 	ListBlockAggregations(blockID int64) ([]*models.BlockAggregation, error)
@@ -28,9 +28,7 @@ func NewManagementHandler(svc ManagementService) *ManagementHandler {
 }
 
 type setManagementAggRequest struct {
-	DeviceID    *int64 `json:"device_id"`
-	MaxPorts    int    `json:"max_ports"`
-	Description string `json:"description"`
+	DeviceModelID int64 `json:"device_model_id"`
 }
 
 // SetManagementAgg handles PUT /api/blocks/{block_id}/management-agg.
@@ -51,7 +49,7 @@ func (h *ManagementHandler) SetManagementAgg(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	agg, err := h.svc.SetManagementAgg(blockID, req.DeviceID, req.MaxPorts, req.Description)
+	agg, err := h.svc.SetManagementAgg(blockID, req.DeviceModelID)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())

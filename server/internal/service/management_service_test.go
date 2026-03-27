@@ -9,42 +9,55 @@ import (
 	"github.com/rnwolfe/fabrik/server/internal/service"
 )
 
-// --- Fake block aggregation repository ---
+// --- Fake management agg repository ---
 
-type fakeBlockAggRepo struct {
-	records map[string]*models.BlockAggregation // key: "blockID:plane"
-	nextID  int64
+type fakeManagementAggRepo struct {
+	aggs       map[string]*models.BlockAggregation // key: "blockID:plane"
+	portCounts map[int64]int                       // key: aggID → allocated port count
+	models     map[int64]*models.DeviceModel       // key: deviceModelID
+	nextID     int64
 }
 
-func newFakeBlockAggRepo() *fakeBlockAggRepo {
-	return &fakeBlockAggRepo{records: make(map[string]*models.BlockAggregation)}
+func newFakeManagementAggRepo() *fakeManagementAggRepo {
+	return &fakeManagementAggRepo{
+		aggs:       make(map[string]*models.BlockAggregation),
+		portCounts: make(map[int64]int),
+		models:     make(map[int64]*models.DeviceModel),
+	}
 }
 
-func aggKey(blockID int64, plane models.NetworkPlane) string {
+func (r *fakeManagementAggRepo) aggKey(blockID int64, plane models.NetworkPlane) string {
 	return fmt.Sprintf("%d:%s", blockID, plane)
 }
 
-func (r *fakeBlockAggRepo) Upsert(agg *models.BlockAggregation) (*models.BlockAggregation, error) {
-	k := aggKey(agg.BlockID, agg.Plane)
-	existing, ok := r.records[k]
-	if ok {
+// addDeviceModel registers a device model in the fake repo for testing.
+func (r *fakeManagementAggRepo) addDeviceModel(id int64, portCount int) {
+	r.models[id] = &models.DeviceModel{ID: id, PortCount: portCount, Vendor: "test", Model: "test"}
+}
+
+// setAllocatedPorts sets the simulated allocated port count for an agg.
+func (r *fakeManagementAggRepo) setAllocatedPorts(aggID int64, count int) {
+	r.portCounts[aggID] = count
+}
+
+func (r *fakeManagementAggRepo) SetAggregation(agg *models.BlockAggregation) (*models.BlockAggregation, error) {
+	key := r.aggKey(agg.BlockID, agg.Plane)
+	if existing, ok := r.aggs[key]; ok {
 		cp := *existing
-		cp.DeviceID = agg.DeviceID
-		cp.MaxPorts = agg.MaxPorts
-		cp.Description = agg.Description
-		r.records[k] = &cp
+		cp.DeviceModelID = agg.DeviceModelID
+		r.aggs[key] = &cp
 		return &cp, nil
 	}
 	r.nextID++
 	out := *agg
 	out.ID = r.nextID
-	r.records[k] = &out
+	r.aggs[key] = &out
 	return &out, nil
 }
 
-func (r *fakeBlockAggRepo) Get(blockID int64, plane models.NetworkPlane) (*models.BlockAggregation, error) {
-	k := aggKey(blockID, plane)
-	a, ok := r.records[k]
+func (r *fakeManagementAggRepo) GetAggregation(blockID int64, plane models.NetworkPlane) (*models.BlockAggregation, error) {
+	key := r.aggKey(blockID, plane)
+	a, ok := r.aggs[key]
 	if !ok {
 		return nil, models.ErrNotFound
 	}
@@ -52,9 +65,9 @@ func (r *fakeBlockAggRepo) Get(blockID int64, plane models.NetworkPlane) (*model
 	return &cp, nil
 }
 
-func (r *fakeBlockAggRepo) ListForBlock(blockID int64) ([]*models.BlockAggregation, error) {
+func (r *fakeManagementAggRepo) ListAggregations(blockID int64) ([]*models.BlockAggregation, error) {
 	var out []*models.BlockAggregation
-	for _, a := range r.records {
+	for _, a := range r.aggs {
 		if a.BlockID == blockID {
 			cp := *a
 			out = append(out, &cp)
@@ -63,45 +76,25 @@ func (r *fakeBlockAggRepo) ListForBlock(blockID int64) ([]*models.BlockAggregati
 	return out, nil
 }
 
-func (r *fakeBlockAggRepo) Delete(blockID int64, plane models.NetworkPlane) error {
-	k := aggKey(blockID, plane)
-	if _, ok := r.records[k]; !ok {
+func (r *fakeManagementAggRepo) DeleteAggregation(blockID int64, plane models.NetworkPlane) error {
+	key := r.aggKey(blockID, plane)
+	if _, ok := r.aggs[key]; !ok {
 		return models.ErrNotFound
 	}
-	delete(r.records, k)
+	delete(r.aggs, key)
 	return nil
 }
 
-func (r *fakeBlockAggRepo) IncrementUsedPorts(blockID int64, plane models.NetworkPlane, delta int) (*models.BlockAggregation, error) {
-	k := aggKey(blockID, plane)
-	a, ok := r.records[k]
-	if !ok {
-		return nil, models.ErrNotFound
-	}
-	newUsed := a.UsedPorts + delta
-	if a.MaxPorts > 0 && newUsed > a.MaxPorts {
-		return nil, errors.New("port capacity exceeded")
-	}
-	cp := *a
-	cp.UsedPorts = newUsed
-	r.records[k] = &cp
-	return &cp, nil
+func (r *fakeManagementAggRepo) CountAllocatedPorts(aggID int64) (int, error) {
+	return r.portCounts[aggID], nil
 }
 
-func (r *fakeBlockAggRepo) DecrementUsedPorts(blockID int64, plane models.NetworkPlane, delta int) (*models.BlockAggregation, error) {
-	k := aggKey(blockID, plane)
-	a, ok := r.records[k]
+func (r *fakeManagementAggRepo) GetDeviceModel(id int64) (*models.DeviceModel, error) {
+	dm, ok := r.models[id]
 	if !ok {
 		return nil, models.ErrNotFound
 	}
-	newUsed := a.UsedPorts - delta
-	if newUsed < 0 {
-		newUsed = 0
-	}
-	cp := *a
-	cp.UsedPorts = newUsed
-	r.records[k] = &cp
-	return &cp, nil
+	return dm, nil
 }
 
 // --- Tests ---
@@ -138,11 +131,11 @@ func TestValidateDeviceRole(t *testing.T) {
 }
 
 func TestSetManagementAgg(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
+	repo.addDeviceModel(42, 48)
 	svc := service.NewManagementService(repo)
 
-	deviceID := int64(42)
-	agg, err := svc.SetManagementAgg(1, &deviceID, 48, "test agg")
+	agg, err := svc.SetManagementAgg(1, 42)
 	if err != nil {
 		t.Fatalf("SetManagementAgg() error = %v", err)
 	}
@@ -152,21 +145,18 @@ func TestSetManagementAgg(t *testing.T) {
 	if agg.Plane != models.PlaneManagement {
 		t.Errorf("Plane = %v, want %v", agg.Plane, models.PlaneManagement)
 	}
-	if *agg.DeviceID != 42 {
-		t.Errorf("DeviceID = %v, want 42", agg.DeviceID)
-	}
-	if agg.MaxPorts != 48 {
-		t.Errorf("MaxPorts = %d, want 48", agg.MaxPorts)
+	if agg.DeviceModelID != 42 {
+		t.Errorf("DeviceModelID = %d, want 42", agg.DeviceModelID)
 	}
 }
 
-func TestSetManagementAgg_NegativeMaxPorts(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+func TestSetManagementAgg_ZeroDeviceModelID(t *testing.T) {
+	repo := newFakeManagementAggRepo()
 	svc := service.NewManagementService(repo)
 
-	_, err := svc.SetManagementAgg(1, nil, -1, "")
+	_, err := svc.SetManagementAgg(1, 0)
 	if err == nil {
-		t.Fatal("expected error for negative max_ports")
+		t.Fatal("expected error for zero device_model_id")
 	}
 	if !errors.Is(err, models.ErrConstraintViolation) {
 		t.Errorf("expected ErrConstraintViolation, got %v", err)
@@ -174,26 +164,27 @@ func TestSetManagementAgg_NegativeMaxPorts(t *testing.T) {
 }
 
 func TestSetManagementAgg_Idempotent(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
+	repo.addDeviceModel(1, 24)
+	repo.addDeviceModel(2, 48)
 	svc := service.NewManagementService(repo)
 
-	_, err := svc.SetManagementAgg(1, nil, 24, "first")
+	_, err := svc.SetManagementAgg(1, 1)
 	if err != nil {
 		t.Fatalf("first SetManagementAgg() error = %v", err)
 	}
 
-	deviceID := int64(5)
-	updated, err := svc.SetManagementAgg(1, &deviceID, 48, "second")
+	updated, err := svc.SetManagementAgg(1, 2)
 	if err != nil {
 		t.Fatalf("second SetManagementAgg() error = %v", err)
 	}
-	if updated.MaxPorts != 48 {
-		t.Errorf("MaxPorts = %d, want 48 after update", updated.MaxPorts)
+	if updated.DeviceModelID != 2 {
+		t.Errorf("DeviceModelID = %d, want 2 after update", updated.DeviceModelID)
 	}
 }
 
 func TestGetManagementAgg_NotFound(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
 	svc := service.NewManagementService(repo)
 
 	_, err := svc.GetManagementAgg(99)
@@ -206,10 +197,11 @@ func TestGetManagementAgg_NotFound(t *testing.T) {
 }
 
 func TestRemoveManagementAgg(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
+	repo.addDeviceModel(1, 24)
 	svc := service.NewManagementService(repo)
 
-	if _, err := svc.SetManagementAgg(1, nil, 0, ""); err != nil {
+	if _, err := svc.SetManagementAgg(1, 1); err != nil {
 		t.Fatalf("SetManagementAgg() error = %v", err)
 	}
 
@@ -224,7 +216,7 @@ func TestRemoveManagementAgg(t *testing.T) {
 }
 
 func TestAllocateManagementPort_NoAgg(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
 	svc := service.NewManagementService(repo)
 
 	// No agg assigned — should return a warning string, not an error.
@@ -241,44 +233,54 @@ func TestAllocateManagementPort_NoAgg(t *testing.T) {
 }
 
 func TestAllocateManagementPort_WithinCapacity(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
+	repo.addDeviceModel(1, 4)
 	svc := service.NewManagementService(repo)
 
-	if _, err := svc.SetManagementAgg(1, nil, 4, ""); err != nil {
+	if _, err := svc.SetManagementAgg(1, 1); err != nil {
 		t.Fatalf("SetManagementAgg() error = %v", err)
 	}
 
+	// Simulate port allocation by checking 0-3 allocated ports all succeed.
 	for i := 0; i < 4; i++ {
-		agg, warning, err := svc.AllocateManagementPort(1)
+		// Manually set the count to simulate previous allocations.
+		agg, err := repo.GetAggregation(1, models.PlaneManagement)
+		if err != nil {
+			t.Fatalf("GetAggregation() error = %v", err)
+		}
+		repo.setAllocatedPorts(agg.ID, i)
+
+		result, warning, err := svc.AllocateManagementPort(1)
 		if err != nil {
 			t.Fatalf("AllocateManagementPort() iteration %d error = %v", i, err)
 		}
 		if warning != "" {
 			t.Errorf("unexpected warning on iteration %d: %s", i, warning)
 		}
-		if agg.UsedPorts != i+1 {
-			t.Errorf("UsedPorts = %d, want %d", agg.UsedPorts, i+1)
+		if result == nil {
+			t.Errorf("expected non-nil agg on iteration %d", i)
 		}
 	}
 }
 
 func TestAllocateManagementPort_CapacityExceeded(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
+	repo.addDeviceModel(1, 2)
 	svc := service.NewManagementService(repo)
 
-	if _, err := svc.SetManagementAgg(1, nil, 2, ""); err != nil {
+	if _, err := svc.SetManagementAgg(1, 1); err != nil {
 		t.Fatalf("SetManagementAgg() error = %v", err)
 	}
 
 	// Fill to capacity.
-	for i := 0; i < 2; i++ {
-		if _, _, err := svc.AllocateManagementPort(1); err != nil {
-			t.Fatalf("AllocateManagementPort() error = %v", err)
-		}
+	agg, err := repo.GetAggregation(1, models.PlaneManagement)
+	if err != nil {
+		t.Fatalf("GetAggregation() error = %v", err)
 	}
+	repo.setAllocatedPorts(agg.ID, 2) // fully allocated
 
 	// Exceed capacity — should return ErrConflict.
-	_, _, err := svc.AllocateManagementPort(1)
+	_, _, err = svc.AllocateManagementPort(1)
 	if err == nil {
 		t.Fatal("expected error when exceeding management agg port capacity")
 	}
@@ -287,36 +289,8 @@ func TestAllocateManagementPort_CapacityExceeded(t *testing.T) {
 	}
 }
 
-func TestReleaseManagementPort(t *testing.T) {
-	repo := newFakeBlockAggRepo()
-	svc := service.NewManagementService(repo)
-
-	if _, err := svc.SetManagementAgg(1, nil, 4, ""); err != nil {
-		t.Fatalf("SetManagementAgg() error = %v", err)
-	}
-
-	if _, _, err := svc.AllocateManagementPort(1); err != nil {
-		t.Fatalf("AllocateManagementPort() error = %v", err)
-	}
-	if _, _, err := svc.AllocateManagementPort(1); err != nil {
-		t.Fatalf("AllocateManagementPort() error = %v", err)
-	}
-
-	if err := svc.ReleaseManagementPort(1); err != nil {
-		t.Fatalf("ReleaseManagementPort() error = %v", err)
-	}
-
-	agg, err := svc.GetManagementAgg(1)
-	if err != nil {
-		t.Fatalf("GetManagementAgg() error = %v", err)
-	}
-	if agg.UsedPorts != 1 {
-		t.Errorf("UsedPorts = %d, want 1 after release", agg.UsedPorts)
-	}
-}
-
 func TestListBlockAggregations_Empty(t *testing.T) {
-	repo := newFakeBlockAggRepo()
+	repo := newFakeManagementAggRepo()
 	svc := service.NewManagementService(repo)
 
 	aggs, err := svc.ListBlockAggregations(99)

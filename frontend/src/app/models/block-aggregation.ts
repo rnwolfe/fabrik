@@ -2,7 +2,7 @@
  * NetworkPlane mirrors the Go models.NetworkPlane type.
  * Enumerates the network planes for block aggregation assignments.
  */
-export type NetworkPlane = 'frontend' | 'management';
+export type NetworkPlane = 'front_end' | 'management';
 
 /**
  * BlockAggregation mirrors the Go models.BlockAggregation struct.
@@ -40,6 +40,13 @@ export interface PortConnection {
   agg_port_index: number;
   leaf_device_name: string;
   created_at: string;
+}
+
+/**
+ * SetManagementAggRequest is the body for PUT /api/blocks/:block_id/management-agg.
+ */
+export interface SetManagementAggRequest {
+  device_model_id: number;
 }
 
 /**
