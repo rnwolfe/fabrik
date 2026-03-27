@@ -6,6 +6,10 @@ import {
   signal,
   computed,
 } from '@angular/core';
+// Visualization imports
+import { TopologyGraphComponent, NodeClickEvent, EdgeClickEvent } from './topology-graph.component';
+import { TopologyDetailPanelComponent, DetailItem } from './topology-detail-panel.component';
+import { SplitPaneComponent } from '../../shared/split-pane/split-pane.component';
 import {
   FormBuilder,
   FormGroup,
@@ -91,6 +95,9 @@ function minValueValidator(min: number) {
     MatListModule,
     MatTooltipModule,
     MatSlideToggleModule,
+    TopologyGraphComponent,
+    TopologyDetailPanelComponent,
+    SplitPaneComponent,
   ],
   templateUrl: './topology.component.html',
   styleUrl: './topology.component.scss',
@@ -114,6 +121,10 @@ export class TopologyComponent implements OnInit, OnDestroy {
   serverWarnings = signal<string[]>([]);
   /** Toggle state: whether the management network plane is shown in the topology view. */
   showManagementPlane = signal(false);
+  /** Whether all fabric nodes are expanded in the graph visualization. */
+  expandAllNodes = signal(false);
+  /** Selected element details for the detail panel. */
+  selectedDetail = signal<DetailItem | null>(null);
 
   readonly stageCounts = [2, 3, 5] as const;
 
@@ -376,6 +387,22 @@ export class TopologyComponent implements OnInit, OnDestroy {
 
   toggleManagementPlane(): void {
     this.showManagementPlane.update(v => !v);
+  }
+
+  toggleExpandAll(): void {
+    this.expandAllNodes.update(v => !v);
+  }
+
+  onNodeClick(evt: NodeClickEvent): void {
+    this.selectedDetail.set({ kind: 'node', data: evt.data });
+  }
+
+  onEdgeClick(evt: EdgeClickEvent): void {
+    this.selectedDetail.set({ kind: 'edge', data: evt.data });
+  }
+
+  onDetailClosed(): void {
+    this.selectedDetail.set(null);
   }
 
   stagesForPreview(plan: TopologyPlan): { role: string; count: number }[] {

@@ -1,0 +1,89 @@
+<div class="graph-wrapper" role="region" aria-label="Topology graph visualization">
+  <!-- Toolbar -->
+  <div class="graph-toolbar">
+    <div class="toolbar-left">
+      @for (fabric of fabrics; track fabric.id) {
+        <button
+          mat-stroked-button
+          class="fabric-chip"
+          [class.frontend-chip]="fabric.tier === 'frontend'"
+          [class.backend-chip]="fabric.tier === 'backend'"
+          [attr.aria-label]="'Toggle expand ' + fabric.name"
+          (click)="toggleCollapse(fabric.id)"
+          matTooltip="{{ (collapseState().get(fabric.id) ?? true) ? 'Expand' : 'Collapse' }} {{ fabric.name }}"
+        >
+          <mat-icon>{{ (collapseState().get(fabric.id) ?? true) ? 'unfold_more' : 'unfold_less' }}</mat-icon>
+          {{ fabric.name }}
+        </button>
+      }
+    </div>
+
+    <div class="toolbar-right">
+      <button
+        mat-icon-button
+        (click)="fitGraph()"
+        aria-label="Fit graph to view"
+        matTooltip="Fit to view"
+      >
+        <mat-icon>fit_screen</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Performance warning -->
+  @if (nodeWarning()) {
+    <div class="node-warning" role="alert">
+      <mat-icon>warning</mat-icon>
+      {{ nodeWarning() }}
+    </div>
+  }
+
+  <!-- Legend -->
+  <div class="graph-legend" aria-label="Color legend">
+    <div class="legend-item">
+      <span class="legend-dot frontend-dot" aria-hidden="true"></span>
+      <span>Front-End</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot backend-dot" aria-hidden="true"></span>
+      <span>Back-End</span>
+    </div>
+    <div class="legend-divider" aria-hidden="true"></div>
+    <div class="legend-item">
+      <span class="util-indicator healthy" aria-hidden="true"></span>
+      <span>Healthy (&lt;70%)</span>
+    </div>
+    <div class="legend-item">
+      <span class="util-indicator warning" aria-hidden="true"></span>
+      <span>Warning (70–90%)</span>
+    </div>
+    <div class="legend-item">
+      <span class="util-indicator critical" aria-hidden="true"></span>
+      <span>Critical (&gt;90%)</span>
+    </div>
+  </div>
+
+  <!-- Rendering indicator -->
+  @if (isRendering()) {
+    <div class="rendering-overlay" role="status" aria-live="polite">
+      <mat-spinner diameter="32"></mat-spinner>
+      <span>Rendering graph…</span>
+    </div>
+  }
+
+  <!-- Empty state -->
+  @if (!fabrics.length && !isRendering()) {
+    <div class="graph-empty" role="status">
+      <mat-icon>device_hub</mat-icon>
+      <p>Create a fabric to visualize the topology.</p>
+    </div>
+  }
+
+  <!-- Cytoscape container -->
+  <div
+    #graphContainer
+    class="cy-container"
+    [class.cy-hidden]="!fabrics.length"
+    aria-label="Interactive topology graph. Use mouse to pan and zoom. Click nodes for details."
+  ></div>
+</div>
