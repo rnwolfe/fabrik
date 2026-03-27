@@ -17,12 +17,8 @@
     <script>
       (function () {
         try {
-          var theme = localStorage.getItem('fabrik-theme');
-          if (!theme) {
-            theme = window.matchMedia('(prefers-color-scheme: dark)').matches
-              ? 'dark'
-              : 'light';
-          }
+          var saved = localStorage.getItem('fabrik-theme');
+          var theme = (saved === 'light' || saved === 'dark') ? saved : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
           document.documentElement.setAttribute('data-theme', theme);
           document.documentElement.style.colorScheme = theme;
         } catch (e) {

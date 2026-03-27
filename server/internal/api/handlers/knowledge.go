@@ -54,9 +54,9 @@ func (h *KnowledgeHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reject paths containing ".." segments or starting with "/" to prevent
-	// directory traversal. fs.ValidPath also enforces the io/fs path contract.
-	if strings.HasPrefix(rawPath, "/") || strings.Contains(rawPath, "..") || !fs.ValidPath(rawPath) {
+	// fs.ValidPath rejects ".." path elements, leading "/", and other invalid
+	// io/fs paths, so a single call is sufficient for directory traversal prevention.
+	if !fs.ValidPath(rawPath) {
 		writeError(w, http.StatusBadRequest, "invalid article path")
 		return
 	}

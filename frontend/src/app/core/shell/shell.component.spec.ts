@@ -1,6 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { render, screen } from '@testing-library/angular';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/angular';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { ShellComponent } from './shell.component';
@@ -14,7 +13,7 @@ describe('ShellComponent', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    document.body.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-theme');
   });
 
   it('should render the app title', async () => {
@@ -44,12 +43,11 @@ describe('ShellComponent', () => {
   });
 
   it('should toggle theme when theme button is clicked', async () => {
-    const user = userEvent.setup();
     await renderShell();
     const themeService = TestBed.inject(ThemeService);
     expect(themeService.current()).toBe('light');
     const btn = screen.getByRole('button', { name: /toggle dark mode/i });
-    await user.click(btn);
+    fireEvent.click(btn);
     expect(themeService.current()).toBe('dark');
   });
 });

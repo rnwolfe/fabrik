@@ -22,13 +22,18 @@ import (
 // the pool has it enabled from the moment it is opened, rather than relying on
 // a single PRAGMA statement that is scoped to only the connection it runs on.
 func Open(path string, migrationsFS fs.FS) (*sql.DB, error) {
-	// Append _pragma=foreign_keys(1) to the DSN so modernc.org/sqlite enables
-	// foreign key enforcement on every new connection it opens.
-	sep := "&"
-	if !strings.Contains(path, "?") {
-		sep = "?"
+	// Normalize plain file paths to SQLite URIs so pragma query params work.
+	// Without the file: scheme, modernc.org/sqlite treats query parameters as
+	// part of the filename, creating a literal file named "fabrik.db?_pragma=…".
+	dsnPath := path
+	if !strings.HasPrefix(dsnPath, "file:") && !strings.HasPrefix(dsnPath, ":") {
+		dsnPath = "file:" + dsnPath
 	}
-	dsn := path + sep + "_pragma=foreign_keys(1)"
+	sep := "?"
+	if strings.Contains(dsnPath, "?") {
+		sep = "&"
+	}
+	dsn := dsnPath + sep + "_pragma=foreign_keys(1)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)

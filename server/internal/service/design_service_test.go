@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
@@ -71,6 +72,17 @@ func TestDesignService_CreateDesign(t *testing.T) {
 			wantErr:     true,
 			wantErrType: models.ErrConstraintViolation,
 		},
+		{
+			name:        "whitespace-only name",
+			designName:  "   ",
+			wantErr:     true,
+			wantErrType: models.ErrConstraintViolation,
+		},
+		{
+			name:        "name with leading and trailing spaces is trimmed",
+			designName:  "  my-design  ",
+			description: "",
+		},
 	}
 
 	for _, tc := range tests {
@@ -92,8 +104,9 @@ func TestDesignService_CreateDesign(t *testing.T) {
 			if d.ID == 0 {
 				t.Error("expected non-zero ID")
 			}
-			if d.Name != tc.designName {
-				t.Errorf("expected name %q, got %q", tc.designName, d.Name)
+			wantName := strings.TrimSpace(tc.designName)
+			if d.Name != wantName {
+				t.Errorf("expected name %q, got %q", wantName, d.Name)
 			}
 		})
 	}

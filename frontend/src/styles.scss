@@ -1,6 +1,6 @@
 // fabrik — Angular Material M3 theme
-// Primary: deep blue/slate (#1e293b family)
-// Accent/Secondary: teal (#0d9488 family)
+// Primary: teal (#0d9488) — brand action color used for interactive elements
+// Secondary: slate (#334155 family) — used for surfaces and secondary UI
 @use '@angular/material' as mat;
 
 // Apply M3 theme using cyan (closest built-in to teal) as primary and

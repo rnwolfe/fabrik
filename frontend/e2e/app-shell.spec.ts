@@ -64,13 +64,13 @@ test.describe('App Shell', () => {
     await toggleBtn.click();
     // Verify dark theme applied
     const theme = await page.evaluate(() =>
-      document.body.getAttribute('data-theme'),
+      document.documentElement.getAttribute('data-theme'),
     );
     expect(theme).toBe('dark');
     // Reload and verify persistence
     await page.reload();
     const themeAfterReload = await page.evaluate(() =>
-      document.body.getAttribute('data-theme'),
+      document.documentElement.getAttribute('data-theme'),
     );
     expect(themeAfterReload).toBe('dark');
   });
