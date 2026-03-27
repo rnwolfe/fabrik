@@ -60,3 +60,38 @@ func TestOpen_ForeignKeys(t *testing.T) {
 		t.Errorf("expected foreign_keys=1, got %d", fk)
 	}
 }
+
+// TestOpen_ForeignKeysPerConnection verifies that foreign_keys=1 is set on
+// every connection in the pool, not just the first one. Two separate
+// connections are acquired and both must report PRAGMA foreign_keys = 1.
+func TestOpen_ForeignKeysPerConnection(t *testing.T) {
+	dir := t.TempDir()
+	db, err := store.Open(dir+"/fk_multi.db", migrations.FS)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	// Acquire two connections concurrently so the pool cannot reuse conn1 for conn2.
+	conn1, err := db.Conn(t.Context())
+	if err != nil {
+		t.Fatalf("conn1: acquire: %v", err)
+	}
+	defer conn1.Close()
+
+	conn2, err := db.Conn(t.Context())
+	if err != nil {
+		t.Fatalf("conn2: acquire: %v", err)
+	}
+	defer conn2.Close()
+
+	for i, conn := range []*sql.Conn{conn1, conn2} {
+		var fk int
+		if err := conn.QueryRowContext(t.Context(), "PRAGMA foreign_keys").Scan(&fk); err != nil {
+			t.Fatalf("conn%d: query foreign_keys: %v", i+1, err)
+		}
+		if fk != 1 {
+			t.Errorf("conn%d: expected foreign_keys=1, got %d", i+1, fk)
+		}
+	}
+}

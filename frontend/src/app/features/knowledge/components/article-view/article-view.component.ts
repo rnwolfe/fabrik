@@ -18,7 +18,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { Subject, switchMap, takeUntil } from 'rxjs';
+import { Subject, from, switchMap, map, takeUntil, catchError, of } from 'rxjs';
 import DOMPurify from 'dompurify';
 
 import { KnowledgeService } from '../../knowledge.service';
@@ -83,39 +83,50 @@ export class ArticleViewComponent implements OnInit, OnChanges {
       this.destroy$.complete();
     });
 
-    // switchMap cancels in-flight requests when a new path arrives.
+    // switchMap cancels in-flight requests AND in-flight renders when a new
+    // path arrives. Piping the async render through from() inside the inner
+    // switchMap ensures a stale render cannot overwrite a newer article.
     this.articlePath$
       .pipe(
-        switchMap((path) => this.knowledgeService.getArticle(path)),
+        switchMap((path) =>
+          this.knowledgeService.getArticle(path).pipe(
+            switchMap((article) => {
+              if (!article.content) {
+                return from(Promise.resolve({ article, rawHtml: null }));
+              }
+              return from(this.markdownRenderer.render(article.content)).pipe(
+                map((rawHtml) => ({ article, rawHtml: rawHtml as string | null })),
+                catchError((err) => {
+                  if (typeof ngDevMode !== 'undefined' && ngDevMode) {
+                    console.warn('ArticleViewComponent: render error', err);
+                  }
+                  return of({ article, rawHtml: null as string | null });
+                }),
+              );
+            }),
+          ),
+        ),
         takeUntil(this.destroy$),
       )
       .subscribe({
-        next: async (a) => {
-          this.article.set(a);
-          if (a.content) {
-            try {
-              const rawHtml = await this.markdownRenderer.render(a.content);
-              // Sanitize with DOMPurify before bypassing Angular's sanitizer.
-              // ADD_ATTR preserves target (external links) and data-knowledge-link
-              // (internal link wiring) which DOMPurify strips by default.
-              const safeHtml = DOMPurify.sanitize(rawHtml, {
-                USE_PROFILES: { html: true },
-                ADD_ATTR: ['target', 'data-knowledge-link'],
-              });
-              this.renderedHtml.set(this.sanitizer.bypassSecurityTrustHtml(safeHtml));
-              this.loading.set(false);
-              // Post-process Mermaid after DOM update
-              setTimeout(() => this.postProcessContent(), 0);
-            } catch (err) {
-              this.error.set('Failed to render article content.');
-              this.loading.set(false);
-              if (typeof ngDevMode !== 'undefined' && ngDevMode) {
-                console.warn('ArticleViewComponent: render error', err);
-              }
-            }
+        next: ({ article, rawHtml }) => {
+          this.article.set(article);
+          if (rawHtml !== null) {
+            // Sanitize with DOMPurify before bypassing Angular's sanitizer.
+            // ADD_ATTR preserves target (external links) and data-knowledge-link
+            // (internal link wiring) which DOMPurify strips by default.
+            const safeHtml = DOMPurify.sanitize(rawHtml, {
+              USE_PROFILES: { html: true },
+              ADD_ATTR: ['target', 'data-knowledge-link'],
+            });
+            this.renderedHtml.set(this.sanitizer.bypassSecurityTrustHtml(safeHtml));
+            // Post-process Mermaid after DOM update — only when content exists
+            setTimeout(() => this.postProcessContent(), 0);
           } else {
-            this.loading.set(false);
+            // Render failed or no content — clear stale HTML
+            this.renderedHtml.set(this.sanitizer.bypassSecurityTrustHtml(''));
           }
+          this.loading.set(false);
         },
         error: (err) => {
           if (err.status === 404) {

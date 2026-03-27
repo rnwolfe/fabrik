@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/rnwolfe/fabrik/server/internal/api/handlers"
@@ -78,6 +79,11 @@ func TestDesignHandler_Create(t *testing.T) {
 			name:       "invalid json",
 			body:       `{bad json`,
 			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "body exceeds 1MB returns 413",
+			body:       `{"name":"` + strings.Repeat("a", (1<<20)+1) + `"}`,
+			wantStatus: http.StatusRequestEntityTooLarge,
 		},
 	}
 
