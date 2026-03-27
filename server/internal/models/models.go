@@ -155,6 +155,52 @@ type DeviceModel struct {
 }
 
 
+// NetworkPlane enumerates the network plane for block aggregation assignments.
+type NetworkPlane string
+
+const (
+	NetworkPlaneFrontEnd    NetworkPlane = "frontend"
+	NetworkPlaneManagement  NetworkPlane = "management"
+)
+
+// BlockAggregation represents an aggregation switch model assigned to a block for a given plane.
+// One aggregation switch is allowed per (block, plane) pair.
+type BlockAggregation struct {
+	ID            int64        `json:"id"`
+	BlockID       int64        `json:"block_id"`
+	Plane         NetworkPlane `json:"plane"`
+	DeviceModelID int64        `json:"device_model_id"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+}
+
+// BlockAggregationSummary extends BlockAggregation with capacity utilization.
+type BlockAggregationSummary struct {
+	BlockAggregation
+	TotalPorts      int    `json:"total_ports"`
+	AllocatedPorts  int    `json:"allocated_ports"`
+	AvailablePorts  int    `json:"available_ports"`
+	Utilization     string `json:"utilization"`
+	Warning         string `json:"warning,omitempty"`
+}
+
+// PortConnection represents a single port allocation between a rack and a block's agg switch.
+type PortConnection struct {
+	ID                  int64     `json:"id"`
+	BlockAggregationID  int64     `json:"block_aggregation_id"`
+	RackID              int64     `json:"rack_id"`
+	AggPortIndex        int       `json:"agg_port_index"`
+	LeafDeviceName      string    `json:"leaf_device_name"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+// AddRackToBlockResult is returned when a rack is added to a block.
+type AddRackToBlockResult struct {
+	Rack        *Rack                  `json:"rack"`
+	Connections []*PortConnection      `json:"connections"`
+	Warning     string                 `json:"warning,omitempty"`
+}
+
 // FabricTier enumerates whether a fabric tier is a front-end or back-end network.
 type FabricTier string
 

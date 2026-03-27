@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes on mux.
-func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler) {
+func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler, blocks *handlers.BlockHandler) {
 	// Design CRUD
 	mux.HandleFunc("POST /api/designs", designs.Create)
 	mux.HandleFunc("GET /api/designs", designs.List)
@@ -54,4 +54,22 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("GET /api/fabrics/{id}", fabrics.Get)
 	mux.HandleFunc("PUT /api/fabrics/{id}", fabrics.Update)
 	mux.HandleFunc("DELETE /api/fabrics/{id}", fabrics.Delete)
+
+	// Blocks CRUD
+	mux.HandleFunc("POST /api/blocks", blocks.CreateBlock)
+	mux.HandleFunc("GET /api/blocks", blocks.ListBlocks)
+	mux.HandleFunc("GET /api/blocks/{id}", blocks.GetBlock)
+
+	// Block aggregation assignments
+	mux.HandleFunc("PUT /api/blocks/{id}/aggregations/{plane}", blocks.AssignAggregation)
+	mux.HandleFunc("GET /api/blocks/{id}/aggregations/{plane}", blocks.GetAggregation)
+	mux.HandleFunc("GET /api/blocks/{id}/aggregations", blocks.ListAggregations)
+	mux.HandleFunc("DELETE /api/blocks/{id}/aggregations/{plane}", blocks.DeleteAggregation)
+
+	// Block aggregation port connections
+	mux.HandleFunc("GET /api/blocks/{id}/aggregations/{plane}/connections", blocks.ListPortConnections)
+
+	// Rack-to-block placement
+	mux.HandleFunc("POST /api/blocks/add-rack", blocks.AddRackToBlock)
+	mux.HandleFunc("DELETE /api/blocks/racks/{rack_id}", blocks.RemoveRackFromBlock)
 }
