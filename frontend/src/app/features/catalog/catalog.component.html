@@ -1,0 +1,154 @@
+<div class="catalog-page">
+  <div class="catalog-header">
+    <div class="catalog-title">
+      <h1>Device Catalog</h1>
+      <p class="catalog-subtitle">Hardware models for use in rack and fabric designs</p>
+    </div>
+    <button mat-raised-button color="primary" (click)="openAddDialog()" aria-label="Add device model">
+      <mat-icon>add</mat-icon>
+      Add Device
+    </button>
+  </div>
+
+  <div class="catalog-filters">
+    <mat-form-field appearance="outline" class="filter-search">
+      <mat-label>Search</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input
+        matInput
+        placeholder="Search vendor or model..."
+        [value]="searchTerm()"
+        (input)="onSearchChange($any($event.target).value)"
+        aria-label="Search device models"
+      />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="filter-vendor">
+      <mat-label>Vendor</mat-label>
+      <mat-select
+        [value]="vendorFilter()"
+        (selectionChange)="onVendorFilterChange($event.value)"
+        aria-label="Filter by vendor"
+      >
+        <mat-option value="">All Vendors</mat-option>
+        @for (vendor of vendors(); track vendor) {
+          <mat-option [value]="vendor.toLowerCase()">{{ vendor }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="filter-type">
+      <mat-label>Type</mat-label>
+      <mat-select
+        [value]="typeFilter()"
+        (selectionChange)="onTypeFilterChange($event.value)"
+        aria-label="Filter by device type"
+      >
+        <mat-option value="">All Types</mat-option>
+        <mat-option value="switch">Switch</mat-option>
+        <mat-option value="server">Server</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+  } @else {
+    <table mat-table [dataSource]="filteredModels()" class="catalog-table" aria-label="Device models">
+      <ng-container matColumnDef="vendor">
+        <th mat-header-cell *matHeaderCellDef>Vendor</th>
+        <td mat-cell *matCellDef="let dm">{{ dm.vendor }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="model">
+        <th mat-header-cell *matHeaderCellDef>Model</th>
+        <td mat-cell *matCellDef="let dm">
+          <span class="model-name">{{ dm.model }}</span>
+          @if (dm.description) {
+            <span class="model-description">{{ dm.description }}</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="port_count">
+        <th mat-header-cell *matHeaderCellDef>Ports</th>
+        <td mat-cell *matCellDef="let dm">{{ dm.port_count || '—' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="height_u">
+        <th mat-header-cell *matHeaderCellDef>Height (U)</th>
+        <td mat-cell *matCellDef="let dm">{{ dm.height_u }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="power_watts">
+        <th mat-header-cell *matHeaderCellDef>Power (W)</th>
+        <td mat-cell *matCellDef="let dm">{{ dm.power_watts || '—' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="seed">
+        <th mat-header-cell *matHeaderCellDef>Type</th>
+        <td mat-cell *matCellDef="let dm">
+          @if (dm.is_seed) {
+            <mat-chip class="chip-seed">Seed</mat-chip>
+          } @else {
+            <mat-chip class="chip-custom">Custom</mat-chip>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef>Actions</th>
+        <td mat-cell *matCellDef="let dm">
+          <div class="action-buttons">
+            @if (!dm.is_seed) {
+              <button
+                mat-icon-button
+                (click)="openEditDialog(dm)"
+                matTooltip="Edit"
+                aria-label="Edit device model"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
+            }
+            <button
+              mat-icon-button
+              (click)="duplicate(dm)"
+              matTooltip="Duplicate"
+              aria-label="Duplicate device model"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
+            @if (!dm.is_seed) {
+              <button
+                mat-icon-button
+                color="warn"
+                (click)="archive(dm)"
+                matTooltip="Archive"
+                aria-label="Archive device model"
+              >
+                <mat-icon>archive</mat-icon>
+              </button>
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;" [attr.draggable]="true" class="device-row"></tr>
+    </table>
+
+    @if (filteredModels().length === 0) {
+      <div class="empty-state">
+        <mat-icon class="empty-icon">devices</mat-icon>
+        <p>No device models found</p>
+        @if (searchTerm() || vendorFilter() || typeFilter()) {
+          <button mat-button (click)="clearFilters()">
+            Clear filters
+          </button>
+        }
+      </div>
+    }
+  }
+</div>

@@ -1,0 +1,47 @@
+<div class="device-picker">
+  <mat-form-field appearance="outline" class="picker-search">
+    <mat-label>Search devices</mat-label>
+    <mat-icon matPrefix>search</mat-icon>
+    <input
+      matInput
+      placeholder="Filter by vendor or model..."
+      [value]="searchTerm()"
+      (input)="onSearchChange($any($event.target).value)"
+      aria-label="Search device models"
+    />
+  </mat-form-field>
+
+  @if (loading()) {
+    <div class="picker-loading">
+      <mat-spinner diameter="32"></mat-spinner>
+    </div>
+  } @else {
+    <mat-selection-list [multiple]="false" class="picker-list" aria-label="Device model list">
+      @for (dm of filteredModels(); track dm.id) {
+        <mat-list-option
+          [value]="dm"
+          [selected]="isSelected(dm)"
+          (click)="select(dm)"
+          [draggable]="true"
+          (dragstart)="onDragStart($event, dm)"
+          class="picker-item"
+          [attr.aria-label]="dm.vendor + ' ' + dm.model"
+        >
+          <div class="picker-item-content">
+            <span class="picker-item-name">{{ dm.vendor }} {{ dm.model }}</span>
+            <span class="picker-item-meta">
+              {{ dm.port_count > 0 ? dm.port_count + ' ports · ' : '' }}{{ dm.height_u }}U · {{ dm.power_watts }}W
+            </span>
+          </div>
+        </mat-list-option>
+      }
+
+      @if (filteredModels().length === 0) {
+        <div class="picker-empty">
+          <mat-icon>devices_other</mat-icon>
+          <span>No devices found</span>
+        </div>
+      }
+    </mat-selection-list>
+  }
+</div>

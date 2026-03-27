@@ -10,4 +10,10 @@ var (
 
 	// ErrConstraintViolation is returned when a business constraint is violated.
 	ErrConstraintViolation = errors.New("constraint violation")
+
+	// ErrDuplicate is returned when a unique constraint would be violated.
+	ErrDuplicate = errors.New("duplicate")
+
+	// ErrSeedReadOnly is returned when a mutation is attempted on a seed device model.
+	ErrSeedReadOnly = errors.New("seed device models are read-only")
 )
