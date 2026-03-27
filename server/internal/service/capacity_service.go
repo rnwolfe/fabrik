@@ -1,7 +1,6 @@
 package service
 
 import (
-	"database/sql"
 	"fmt"
 	"log/slog"
 
@@ -76,29 +75,5 @@ func (s *CapacityService) GetDesignCapacity(designID int64) (*models.CapacitySum
 		return nil, fmt.Errorf("get design capacity %d: %w", designID, err)
 	}
 	slog.Debug("design capacity computed", "designID", designID)
-	return c, nil
-}
-
-// aggregateFromRows builds a CapacitySummary by summing device model metrics from
-// a row set containing (power_watts_idle, power_watts_typical, power_watts_max,
-// cpu_sockets, cores_per_socket, ram_gb, storage_tb, gpu_count, device_count).
-// It is called after the SQL aggregation queries.
-func aggregateFromRow(row *sql.Row, level models.CapacityLevel, id int64, name string) (*models.CapacitySummary, error) {
-	c := &models.CapacitySummary{
-		Level: level,
-		ID:    id,
-		Name:  name,
-	}
-	var vcpuSockets, vcpuCores int
-	err := row.Scan(
-		&c.PowerWattsIdle, &c.PowerWattsTypical, &c.PowerWattsMax,
-		&vcpuSockets, &vcpuCores,
-		&c.TotalRAMGB, &c.TotalStorageTB, &c.TotalGPUCount,
-		&c.DeviceCount,
-	)
-	if err != nil {
-		return nil, err
-	}
-	c.TotalVCPU = vcpuSockets * vcpuCores
 	return c, nil
 }

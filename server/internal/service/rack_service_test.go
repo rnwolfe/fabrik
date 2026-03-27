@@ -254,7 +254,7 @@ func TestRackService_RackTypeCRUD(t *testing.T) {
 	svc, _, _ := newRackSvc()
 
 	t.Run("create valid", func(t *testing.T) {
-		rt, err := svc.CreateRackType("42U-standard", "desc", 42, 10000)
+		rt, err := svc.CreateRackType("42U-standard", "desc", 42, 10000, 0, 0)
 		if err != nil {
 			t.Fatalf("CreateRackType: %v", err)
 		}
@@ -267,28 +267,28 @@ func TestRackService_RackTypeCRUD(t *testing.T) {
 	})
 
 	t.Run("create empty name", func(t *testing.T) {
-		_, err := svc.CreateRackType("", "", 42, 0)
+		_, err := svc.CreateRackType("", "", 42, 0, 0, 0)
 		if !errors.Is(err, models.ErrConstraintViolation) {
 			t.Errorf("expected ErrConstraintViolation, got %v", err)
 		}
 	})
 
 	t.Run("create zero height", func(t *testing.T) {
-		_, err := svc.CreateRackType("name", "", 0, 0)
+		_, err := svc.CreateRackType("name", "", 0, 0, 0, 0)
 		if !errors.Is(err, models.ErrConstraintViolation) {
 			t.Errorf("expected ErrConstraintViolation, got %v", err)
 		}
 	})
 
 	t.Run("create negative power", func(t *testing.T) {
-		_, err := svc.CreateRackType("name", "", 42, -1)
+		_, err := svc.CreateRackType("name", "", 42, -1, 0, 0)
 		if !errors.Is(err, models.ErrConstraintViolation) {
 			t.Errorf("expected ErrConstraintViolation, got %v", err)
 		}
 	})
 
 	t.Run("delete with no racks", func(t *testing.T) {
-		rt, _ := svc.CreateRackType("delete-me", "", 42, 0)
+		rt, _ := svc.CreateRackType("delete-me", "", 42, 0, 0, 0)
 		if err := svc.DeleteRackType(rt.ID); err != nil {
 			t.Fatalf("DeleteRackType: %v", err)
 		}
@@ -717,5 +717,260 @@ func TestRackService_PlaceDevice_ManagementCapacityWarning(t *testing.T) {
 	}
 	if result.Warning == "" {
 		t.Error("expected power capacity warning for management_tor, got none")
+	}
+}
+
+// TestRackService_PlaceDevice_HardMaxPowerConstraint verifies that PlaceDevice returns
+// ErrConstraintViolation when the device's power_watts_max would push total max power
+// above the rack's power_oversub_pct_max threshold.
+func TestRackService_PlaceDevice_HardMaxPowerConstraint(t *testing.T) {
+	tests := []struct {
+		name            string
+		rackCapacityW   int
+		oversubPctMax   int // 0 means use default (110)
+		existingMaxW    int // power_watts_max already consumed by pre-placed device
+		deviceMaxW      int // power_watts_max of the device being placed
+		wantErr         error
+	}{
+		{
+			name:          "default 110% limit exceeded",
+			rackCapacityW: 1000,
+			oversubPctMax: 0, // default = 110 → limit = 1100W
+			existingMaxW:  900,
+			deviceMaxW:    300, // 900+300=1200 > 1100 → reject
+			wantErr:       models.ErrConstraintViolation,
+		},
+		{
+			name:          "custom 120% limit exceeded",
+			rackCapacityW: 1000,
+			oversubPctMax: 120, // limit = 1200W
+			existingMaxW:  1000,
+			deviceMaxW:    300, // 1000+300=1300 > 1200 → reject
+			wantErr:       models.ErrConstraintViolation,
+		},
+		{
+			name:          "exactly at limit is allowed",
+			rackCapacityW: 1000,
+			oversubPctMax: 110, // limit = 1100W
+			existingMaxW:  800,
+			deviceMaxW:    300, // 800+300=1100 == 1100 → allowed
+			wantErr:       nil,
+		},
+		{
+			name:          "one watt over limit is rejected",
+			rackCapacityW: 1000,
+			oversubPctMax: 110, // limit = 1100W
+			existingMaxW:  800,
+			deviceMaxW:    301, // 800+301=1101 > 1100 → reject
+			wantErr:       models.ErrConstraintViolation,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, rr := newRackSvc()
+
+			// Pre-existing device to consume some max power.
+			existingDmID := rr.nextDeviceID + 1
+			rr.deviceModels[existingDmID] = &models.DeviceModel{
+				ID:            existingDmID,
+				Vendor:        "Existing",
+				Model:         "Device",
+				HeightU:       1,
+				PowerWattsMax: tc.existingMaxW,
+			}
+			rr.nextDeviceID = existingDmID
+
+			// Device being placed.
+			newDmID := rr.nextDeviceID + 2
+			rr.deviceModels[newDmID] = &models.DeviceModel{
+				ID:            newDmID,
+				Vendor:        "New",
+				Model:         "Device",
+				HeightU:       1,
+				PowerWattsMax: tc.deviceMaxW,
+			}
+
+			rack, _ := svc.CreateRack("power-max-rack", "", nil, nil, 42, tc.rackCapacityW)
+			// Manually inject oversubPctMax into the rack (bypassing the create signature
+			// which doesn't currently accept it, but tests the service constraint logic).
+			rr.racks[rack.ID].PowerOversubPctMax = tc.oversubPctMax
+
+			// Pre-place the existing device to consume baseline power.
+			if tc.existingMaxW > 0 {
+				_, err := svc.PlaceDevice(rack.ID, existingDmID, "existing", "", "leaf", 1)
+				if err != nil {
+					t.Fatalf("pre-place existing device: %v", err)
+				}
+			}
+
+			// Now attempt to place the new device.
+			_, err := svc.PlaceDevice(rack.ID, newDmID, "new-device", "", "leaf", 2)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Errorf("expected %v, got %v", tc.wantErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestRackService_PlaceDevice_ZeroCapacityRack verifies that a rack with
+// PowerCapacityW = 0 (unlimited) accepts device placements without power errors.
+func TestRackService_PlaceDevice_ZeroCapacityRack(t *testing.T) {
+	svc, _, rr := newRackSvc()
+
+	// High-power device that would exceed any typical power budget.
+	dmID := rr.nextDeviceID + 1
+	rr.deviceModels[dmID] = &models.DeviceModel{
+		ID:                dmID,
+		Vendor:            "BigPower",
+		Model:             "HPC",
+		HeightU:           1,
+		PowerWattsTypical: 50000,
+		PowerWattsMax:     100000,
+	}
+	rr.nextDeviceID = dmID
+
+	// Rack with zero power capacity (unlimited).
+	rack, _ := svc.CreateRack("unlimited-rack", "", nil, nil, 42, 0)
+
+	// Placing a very high-power device should succeed with no power errors.
+	result, err := svc.PlaceDevice(rack.ID, dmID, "hpc-node", "", "server", 1)
+	if err != nil {
+		t.Fatalf("PlaceDevice in zero-capacity rack: %v", err)
+	}
+	// Should also produce no power warning (zero capacity = unlimited).
+	if result.Warning != "" {
+		t.Errorf("expected no warning for unlimited rack, got %q", result.Warning)
+	}
+}
+
+// TestRackService_PlaceDevice_ZeroPowerDevice verifies that a device with all
+// power fields = 0 (e.g. a patch panel) can always be placed even in a tight rack.
+func TestRackService_PlaceDevice_ZeroPowerDevice(t *testing.T) {
+	svc, _, rr := newRackSvc()
+
+	// High-power filler device to saturate the power budget.
+	fillerDmID := rr.nextDeviceID + 1
+	rr.deviceModels[fillerDmID] = &models.DeviceModel{
+		ID:                fillerDmID,
+		Vendor:            "Filler",
+		Model:             "Switch",
+		HeightU:           1,
+		PowerWattsTypical: 950,
+		PowerWattsMax:     1050,
+	}
+	rr.nextDeviceID = fillerDmID
+
+	// Zero-power device (patch panel, cable manager, etc.).
+	zeroDmID := rr.nextDeviceID + 2
+	rr.deviceModels[zeroDmID] = &models.DeviceModel{
+		ID:                zeroDmID,
+		Vendor:            "Panduit",
+		Model:             "PatchPanel",
+		HeightU:           1,
+		PowerWattsIdle:    0,
+		PowerWattsTypical: 0,
+		PowerWattsMax:     0,
+	}
+
+	// Rack with 1000W capacity — filler device uses 1050W max, which exceeds 110% (1100W) limit
+	// so we pre-place at 950W typical but 1050W max is just under the 1100W default max.
+	// Use a tight rack: 500W capacity with default 110% → max limit = 550W.
+	rack, _ := svc.CreateRack("tight-rack", "", nil, nil, 42, 500)
+	// Pre-place filler to consume 500W typical, 500W max (exactly at capacity).
+	fillerDm2ID := rr.nextDeviceID + 3
+	rr.deviceModels[fillerDm2ID] = &models.DeviceModel{
+		ID:                fillerDm2ID,
+		Vendor:            "Filler2",
+		Model:             "Switch2",
+		HeightU:           1,
+		PowerWattsTypical: 500,
+		PowerWattsMax:     500,
+	}
+	_, err := svc.PlaceDevice(rack.ID, fillerDm2ID, "filler", "", "leaf", 1)
+	if err != nil {
+		t.Fatalf("pre-place filler: %v", err)
+	}
+
+	// Now place the zero-power device — should always succeed regardless of power budget.
+	result, err := svc.PlaceDevice(rack.ID, zeroDmID, "patch-panel", "", "other", 2)
+	if err != nil {
+		t.Fatalf("PlaceDevice zero-power device in tight rack: %v", err)
+	}
+	if result.Device.ID == 0 {
+		t.Error("expected valid device ID")
+	}
+}
+
+// TestRackService_CreateRackType_PowerOversubValidation verifies that invalid
+// power oversubscription percentage values are rejected.
+func TestRackService_CreateRackType_PowerOversubValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		warn    int
+		max     int
+		wantErr bool
+	}{
+		{"both zero (use defaults)", 0, 0, false},
+		{"valid: warn=80 max=110", 80, 110, false},
+		{"valid: warn=100 max=100 (equal)", 100, 100, false},
+		{"invalid: warn=0 max=110 (partial)", 0, 110, true},
+		{"invalid: warn negative", -1, 110, true},
+		{"invalid: max < warn", 110, 100, true},
+		{"invalid: warn > 500", 501, 600, true},
+		{"invalid: max > 500", 100, 501, true},
+		{"boundary: warn=500 max=500", 500, 500, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, _ := newRackSvc()
+			_, err := svc.CreateRackType("test-type", "", 42, 10000, tc.warn, tc.max)
+			if tc.wantErr {
+				if !errors.Is(err, models.ErrConstraintViolation) {
+					t.Errorf("expected ErrConstraintViolation, got %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestRackService_UpdateRackType_PowerOversubValidation verifies that invalid
+// power oversubscription percentage values are rejected on update.
+func TestRackService_UpdateRackType_PowerOversubValidation(t *testing.T) {
+	svc, _, _ := newRackSvc()
+
+	// Create a valid rack type first.
+	rt, err := svc.CreateRackType("base-type", "", 42, 10000, 0, 0)
+	if err != nil {
+		t.Fatalf("CreateRackType: %v", err)
+	}
+
+	// Valid update with oversub values.
+	_, err = svc.UpdateRackType(rt.ID, "updated-type", "", 42, 10000, 80, 120)
+	if err != nil {
+		t.Fatalf("UpdateRackType with valid oversub: %v", err)
+	}
+
+	// Invalid update: max < warn.
+	_, err = svc.UpdateRackType(rt.ID, "updated-type", "", 42, 10000, 120, 80)
+	if !errors.Is(err, models.ErrConstraintViolation) {
+		t.Errorf("expected ErrConstraintViolation for max < warn, got %v", err)
+	}
+
+	// Invalid update: warn > 500.
+	_, err = svc.UpdateRackType(rt.ID, "updated-type", "", 42, 10000, 600, 700)
+	if !errors.Is(err, models.ErrConstraintViolation) {
+		t.Errorf("expected ErrConstraintViolation for warn > 500, got %v", err)
 	}
 }

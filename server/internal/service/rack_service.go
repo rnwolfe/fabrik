@@ -65,8 +65,31 @@ func (s *RackService) WithManagementAllocator(alloc ManagementPortAllocator) *Ra
 
 // --- Rack Type operations ---
 
+// validatePowerOversubPct validates that the power oversubscription percent values are
+// internally consistent and within a reasonable upper bound.
+// warn must be > 0, max must be >= warn, and both must be <= 500.
+// Zero values are allowed — they indicate "use defaults" and are not validated.
+func validatePowerOversubPct(warn, max int) error {
+	if warn == 0 && max == 0 {
+		return nil // both unset — defaults will be applied at runtime
+	}
+	if warn <= 0 {
+		return fmt.Errorf("%w: power_oversub_pct_warn must be > 0", models.ErrConstraintViolation)
+	}
+	if max < warn {
+		return fmt.Errorf("%w: power_oversub_pct_max (%d) must be >= power_oversub_pct_warn (%d)", models.ErrConstraintViolation, max, warn)
+	}
+	if warn > 500 {
+		return fmt.Errorf("%w: power_oversub_pct_warn (%d) exceeds maximum allowed value of 500", models.ErrConstraintViolation, warn)
+	}
+	if max > 500 {
+		return fmt.Errorf("%w: power_oversub_pct_max (%d) exceeds maximum allowed value of 500", models.ErrConstraintViolation, max)
+	}
+	return nil
+}
+
 // CreateRackType validates and creates a new RackTemplate.
-func (s *RackService) CreateRackType(name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *RackService) CreateRackType(name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: rack type name is required", models.ErrConstraintViolation)
@@ -77,11 +100,16 @@ func (s *RackService) CreateRackType(name, description string, heightU, powerCap
 	if powerCapacityW < 0 {
 		return nil, fmt.Errorf("%w: power_capacity_w must be non-negative", models.ErrConstraintViolation)
 	}
+	if err := validatePowerOversubPct(powerOversubPctWarn, powerOversubPctMax); err != nil {
+		return nil, err
+	}
 	rt, err := s.typeRepo.Create(&models.RackTemplate{
-		Name:           name,
-		HeightU:        heightU,
-		PowerCapacityW: powerCapacityW,
-		Description:    description,
+		Name:               name,
+		HeightU:            heightU,
+		PowerCapacityW:     powerCapacityW,
+		PowerOversubPctWarn: powerOversubPctWarn,
+		PowerOversubPctMax:  powerOversubPctMax,
+		Description:        description,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create rack type: %w", err)
@@ -109,7 +137,7 @@ func (s *RackService) GetRackType(id int64) (*models.RackTemplate, error) {
 }
 
 // UpdateRackType updates a rack type's fields.
-func (s *RackService) UpdateRackType(id int64, name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *RackService) UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: rack type name is required", models.ErrConstraintViolation)
@@ -120,12 +148,17 @@ func (s *RackService) UpdateRackType(id int64, name, description string, heightU
 	if powerCapacityW < 0 {
 		return nil, fmt.Errorf("%w: power_capacity_w must be non-negative", models.ErrConstraintViolation)
 	}
+	if err := validatePowerOversubPct(powerOversubPctWarn, powerOversubPctMax); err != nil {
+		return nil, err
+	}
 	rt, err := s.typeRepo.Update(&models.RackTemplate{
-		ID:             id,
-		Name:           name,
-		HeightU:        heightU,
-		PowerCapacityW: powerCapacityW,
-		Description:    description,
+		ID:                  id,
+		Name:                name,
+		HeightU:             heightU,
+		PowerCapacityW:      powerCapacityW,
+		PowerOversubPctWarn: powerOversubPctWarn,
+		PowerOversubPctMax:  powerOversubPctMax,
+		Description:         description,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update rack type %d: %w", id, err)
