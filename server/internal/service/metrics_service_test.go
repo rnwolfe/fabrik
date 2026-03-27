@@ -151,6 +151,26 @@ func TestMetricsService_GetDesignMetrics_3stage(t *testing.T) {
 	if f.LeafSpineOversubscription != 3.0 {
 		t.Errorf("expected leaf→spine oversubscription=3.0, got %f", f.LeafSpineOversubscription)
 	}
+	// 3-stage should have a non-zero spine→super-spine ratio.
+	if f.SpineSuperSpineOversubscription <= 0.0 {
+		t.Errorf("expected spine→super-spine oversubscription > 0, got %f", f.SpineSuperSpineOversubscription)
+	}
+}
+
+func TestMetricsService_GetDesignMetrics_powerZeroCapacity(t *testing.T) {
+	repo := newFakeMetricsRepo()
+	// Zero capacity — utilization should be 0, not a divide-by-zero.
+	repo.totalDrawW = 100
+	repo.totalCapacityW = 0
+
+	svc := service.NewMetricsService(repo)
+	m, err := svc.GetDesignMetrics(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m.Power.UtilizationPct != 0.0 {
+		t.Errorf("expected utilization=0 when capacity=0, got %f", m.Power.UtilizationPct)
+	}
 }
 
 func TestMetricsService_GetDesignMetrics_chokePoint(t *testing.T) {

@@ -63,7 +63,6 @@ func (s *MetricsService) GetDesignMetrics(designID int64) (*models.DesignMetrics
 		return nil, err
 	}
 
-	_ = totalSwitches
 	m := &models.DesignMetrics{
 		DesignID:               designID,
 		TotalHosts:             totalHostPorts,
@@ -90,7 +89,6 @@ func (s *MetricsService) computeFabricMetrics(fabrics []*store.FabricRecord) (
 ) {
 	entries = []models.FabricMetricEntry{}
 	portEntries = []models.PortUtilizationEntry{}
-	var bisectionBWs []float64
 
 	for _, f := range fabrics {
 		topo, err := CalculateTopology(f.Stages, f.Radix, f.Oversubscription)
@@ -128,19 +126,6 @@ func (s *MetricsService) computeFabricMetrics(fabrics []*store.FabricRecord) (
 		totalSwitches += topo.TotalSwitches
 		totalHostPorts += topo.TotalHostPorts
 
-		// Bisection BW: requires a leaf model with known port speed.
-		// We approximate using port_count as a proxy for port speed (Gbps per port).
-		// This is a placeholder until per-port speed is stored in DeviceModel.
-		if f.LeafModelID != nil {
-			dm, err := s.repo.GetDeviceModelByID(*f.LeafModelID)
-			if err == nil && dm.PortCount > 0 {
-				// Bisection BW = (leaf_count * leaf_uplinks * port_speed_gbps) / 2
-				// We don't have port_speed, so we report 0 unless it becomes available.
-				// Approximate: port_speed ≈ 1 Gbps per port as placeholder.
-				_ = dm
-			}
-		}
-
 		// Port utilization entries per tier.
 		leafTotal := topo.LeafCount * topo.Radix
 		leafAllocated := topo.LeafCount * (topo.LeafDownlinks + topo.LeafUplinks)
@@ -155,8 +140,9 @@ func (s *MetricsService) computeFabricMetrics(fabrics []*store.FabricRecord) (
 
 		if topo.Stages >= 2 {
 			spineTotal := topo.SpineCount * topo.Radix
-			// Spine downlinks = one port per leaf per spine in full mesh.
-			spineAllocated := topo.SpineCount * topo.LeafCount
+			// Spine downlinks: one port per leaf. Spine uplinks (3-stage+): one port per super-spine.
+			spinePortsPerSwitch := topo.LeafCount + topo.SuperSpineCount
+			spineAllocated := topo.SpineCount * spinePortsPerSwitch
 			portEntries = append(portEntries, models.PortUtilizationEntry{
 				FabricID:       f.ID,
 				FabricName:     f.Name,
@@ -180,11 +166,6 @@ func (s *MetricsService) computeFabricMetrics(fabrics []*store.FabricRecord) (
 			})
 		}
 
-		// Track bisection bandwidth contributions.
-		if f.LeafModelID != nil {
-			// Without per-port speed, bisection BW is not computable; skip.
-			_ = bisectionBWs
-		}
 	}
 
 	return entries, portEntries, totalSwitches, totalHostPorts, bisectionBW

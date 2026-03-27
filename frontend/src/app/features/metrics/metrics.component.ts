@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   OnInit,
   OnDestroy,
@@ -44,6 +45,7 @@ import { Design, DesignMetrics } from '../../models';
   ],
   templateUrl: './metrics.component.html',
   styleUrl: './metrics.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MetricsComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
