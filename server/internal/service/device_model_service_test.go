@@ -175,7 +175,7 @@ func TestDeviceModelService_Create(t *testing.T) {
 				Model:      tc.model,
 				PortCount:  tc.portCount,
 				HeightU:    tc.heightU,
-				PowerWatts: tc.powerWatts,
+				PowerWattsTypical: tc.powerWatts,
 			}
 			out, err := svc.CreateDeviceModel(dm)
 			if tc.wantErr {
@@ -274,7 +274,7 @@ func TestDeviceModelService_Update(t *testing.T) {
 		Model:      "Updated",
 		HeightU:    2,
 		PortCount:  48,
-		PowerWatts: 600,
+		PowerWattsTypical: 600,
 	})
 	if err != nil {
 		t.Fatalf("UpdateDeviceModel: %v", err)
@@ -331,7 +331,7 @@ func TestDeviceModelService_Duplicate(t *testing.T) {
 		Model:      "OrigModel",
 		PortCount:  32,
 		HeightU:    2,
-		PowerWatts: 400,
+		PowerWattsTypical: 400,
 	})
 
 	cp, err := svc.DuplicateDeviceModel(src.ID)

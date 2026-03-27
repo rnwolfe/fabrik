@@ -159,7 +159,7 @@ func TestFabricStore_WithModelIDs(t *testing.T) {
 
 	// Insert a device model directly.
 	_, err := db.Exec(
-		`INSERT INTO device_models (vendor, model, port_count, height_u, power_watts)
+		`INSERT INTO device_models (vendor, model, port_count, height_u, power_watts_typical)
 		 VALUES ('Arista', '7050CX3', 64, 1, 400)`,
 	)
 	if err != nil {

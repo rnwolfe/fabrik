@@ -7,6 +7,8 @@ export interface RackTemplate {
   name: string;
   height_u: number;
   power_capacity_w: number;
+  power_oversub_pct_warn: number;
+  power_oversub_pct_max: number;
   description: string;
   created_at: string;
   updated_at: string;
@@ -23,6 +25,8 @@ export interface Rack {
   name: string;
   height_u: number;
   power_capacity_w: number;
+  power_oversub_pct_warn: number;
+  power_oversub_pct_max: number;
   description: string;
   created_at: string;
   updated_at: string;
@@ -44,8 +48,16 @@ export interface DeviceSummary {
   updated_at: string;
   model_vendor: string;
   model_name: string;
+  model_type: string;
   height_u: number;
-  power_watts: number;
+  power_watts_idle: number;
+  power_watts_typical: number;
+  power_watts_max: number;
+  cpu_sockets: number;
+  cores_per_socket: number;
+  ram_gb: number;
+  storage_tb: number;
+  gpu_count: number;
 }
 
 /**
@@ -55,7 +67,9 @@ export interface DeviceSummary {
 export interface RackSummary extends Rack {
   used_u: number;
   available_u: number;
-  used_watts: number;
+  used_watts_idle: number;
+  used_watts_typical: number;
+  used_watts_max: number;
   devices: DeviceSummary[];
   warning?: string;
 }

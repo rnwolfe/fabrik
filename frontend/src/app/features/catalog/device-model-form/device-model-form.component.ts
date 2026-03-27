@@ -44,9 +44,17 @@ export class DeviceModelFormComponent implements OnInit {
     this.form = this.fb.group({
       vendor: [dm?.vendor ?? '', [Validators.required]],
       model: [dm?.model ?? '', [Validators.required]],
+      device_model_type: [dm?.device_model_type ?? 'network'],
       port_count: [dm?.port_count ?? 0, [Validators.min(0)]],
       height_u: [dm?.height_u ?? 1, [Validators.required, Validators.min(1), Validators.max(50)]],
-      power_watts: [dm?.power_watts ?? 0, [Validators.min(0)]],
+      power_watts_idle: [dm?.power_watts_idle ?? 0, [Validators.min(0)]],
+      power_watts_typical: [dm?.power_watts_typical ?? 0, [Validators.min(0)]],
+      power_watts_max: [dm?.power_watts_max ?? 0, [Validators.min(0)]],
+      cpu_sockets: [dm?.cpu_sockets ?? 0, [Validators.min(0)]],
+      cores_per_socket: [dm?.cores_per_socket ?? 0, [Validators.min(0)]],
+      ram_gb: [dm?.ram_gb ?? 0, [Validators.min(0)]],
+      storage_tb: [dm?.storage_tb ?? 0, [Validators.min(0)]],
+      gpu_count: [dm?.gpu_count ?? 0, [Validators.min(0)]],
       description: [dm?.description ?? ''],
     });
   }

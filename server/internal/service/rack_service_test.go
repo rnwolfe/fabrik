@@ -209,22 +209,25 @@ func (r *fakeRackRepo) ListDevicesInRack(rackID int64) ([]*models.DeviceSummary,
 		}
 		dm := r.deviceModels[d.DeviceModelID]
 		heightU := 1
-		powerWatts := 0
+		powerTypical := 0
+		powerMax := 0
 		vendor := ""
 		modelName := ""
 		if dm != nil {
 			heightU = dm.HeightU
-			powerWatts = dm.PowerWatts
+			powerTypical = dm.PowerWattsTypical
+			powerMax = dm.PowerWattsMax
 			vendor = dm.Vendor
 			modelName = dm.Model
 		}
 		cp := *d
 		out = append(out, &models.DeviceSummary{
-			Device:      cp,
-			ModelVendor: vendor,
-			ModelName:   modelName,
-			HeightU:     heightU,
-			PowerWatts:  powerWatts,
+			Device:            cp,
+			ModelVendor:       vendor,
+			ModelName:         modelName,
+			HeightU:           heightU,
+			PowerWattsTypical: powerTypical,
+			PowerWattsMax:     powerMax,
 		})
 	}
 	return out, nil
@@ -348,7 +351,7 @@ func TestRackService_PlaceDevice_RUOverflow(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Cisco", Model: "ASR", HeightU: 2, PowerWatts: 500}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Cisco", Model: "ASR", HeightU: 2, PowerWattsTypical: 500}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("small-rack", "", nil, nil, 2, 10000) // exactly 2U
@@ -370,7 +373,7 @@ func TestRackService_PlaceDevice_PositionOverlap(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Arista", Model: "7050", HeightU: 1, PowerWatts: 200}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Arista", Model: "7050", HeightU: 1, PowerWattsTypical: 200}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("overlap-rack", "", nil, nil, 10, 5000)
@@ -392,8 +395,9 @@ func TestRackService_PlaceDevice_PowerSoftWarning(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	// Device uses 900W; rack capacity is 1000W → 90% > 80% threshold.
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Juniper", Model: "MX", HeightU: 1, PowerWatts: 900}
+	// Device uses 1100W typical; rack capacity is 1000W → 110% > 100% warn threshold.
+	// power_watts_max is 0 so hard limit is not enforced.
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Juniper", Model: "MX", HeightU: 1, PowerWattsTypical: 1100}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("power-rack", "", nil, nil, 42, 1000)
@@ -402,7 +406,7 @@ func TestRackService_PlaceDevice_PowerSoftWarning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlaceDevice: %v", err)
 	}
-	// Should succeed with a warning.
+	// Should succeed with a warning (typical exceeded warn threshold, but max=0 so no hard block).
 	if result.Warning == "" {
 		t.Error("expected power warning, got empty")
 	}
@@ -412,7 +416,7 @@ func TestRackService_PlaceDevice_MultiRU(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Cisco", Model: "Nexus9500", HeightU: 7, PowerWatts: 3000}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "Cisco", Model: "Nexus9500", HeightU: 7, PowerWattsTypical: 3000}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("multi-ru-rack", "", nil, nil, 42, 20000)
@@ -442,7 +446,7 @@ func TestRackService_PlaceDevice_PositionBounds(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "X", Model: "Y", HeightU: 1, PowerWatts: 0}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "X", Model: "Y", HeightU: 1, PowerWattsTypical: 0}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("bounds-rack", "", nil, nil, 5, 0)
@@ -464,7 +468,7 @@ func TestRackService_PlaceDevice_ExactEndOfRack(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "X", Model: "Y", HeightU: 1, PowerWatts: 0}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "X", Model: "Y", HeightU: 1, PowerWattsTypical: 0}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("exact-end-rack", "", nil, nil, 42, 0)
@@ -483,7 +487,7 @@ func TestRackService_MoveDeviceInRack(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWatts: 100}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWattsTypical: 100}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("move-rack", "", nil, nil, 10, 5000)
@@ -502,7 +506,7 @@ func TestRackService_MoveDeviceCrossRack(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWatts: 100}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWattsTypical: 100}
 	rr.nextDeviceID = dmID
 
 	src, _ := svc.CreateRack("src-rack", "", nil, nil, 10, 5000)
@@ -526,7 +530,7 @@ func TestRackService_MoveDeviceCrossRack_RUOverflow(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 3, PowerWatts: 100}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 3, PowerWattsTypical: 100}
 	rr.nextDeviceID = dmID
 
 	src, _ := svc.CreateRack("src", "", nil, nil, 10, 5000)
@@ -545,7 +549,7 @@ func TestRackService_RemoveDevice(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWatts: 100}
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWattsTypical: 100}
 	rr.nextDeviceID = dmID
 
 	rack, _ := svc.CreateRack("rem-rack", "", nil, nil, 10, 5000)
@@ -568,10 +572,11 @@ func TestRackService_GetRackSummary_PowerWarning(t *testing.T) {
 	svc, _, rr := newRackSvc()
 
 	dmID := rr.nextDeviceID + 1
-	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWatts: 850}
+	// Device uses 1050W typical → exceeds 100% warn threshold of 1000W capacity.
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWattsTypical: 1050}
 	rr.nextDeviceID = dmID
 
-	// Rack with 1000W capacity; device uses 850W = 85% → warning.
+	// Rack with 1000W capacity; device uses 1050W = 105% → warning.
 	rack, _ := svc.CreateRack("summary-rack", "", nil, nil, 42, 1000)
 	svc.PlaceDevice(rack.ID, dmID, "dev", "", "leaf", 1)
 
@@ -585,8 +590,8 @@ func TestRackService_GetRackSummary_PowerWarning(t *testing.T) {
 	if summary.AvailableU != 41 {
 		t.Errorf("expected AvailableU 41, got %d", summary.AvailableU)
 	}
-	if summary.UsedWatts != 850 {
-		t.Errorf("expected UsedWatts 850, got %d", summary.UsedWatts)
+	if summary.UsedWattsTypical != 1050 {
+		t.Errorf("expected UsedWattsTypical 1050, got %d", summary.UsedWattsTypical)
 	}
 	if summary.Warning == "" {
 		t.Error("expected power warning in summary, got empty")
@@ -660,7 +665,8 @@ func TestRackService_PlaceDevice_ManagementRoles(t *testing.T) {
 				Vendor:     "TestVendor",
 				Model:      "TestModel",
 				HeightU:    tc.dmHeightU,
-				PowerWatts: powerWatts,
+				PowerWattsTypical: powerWatts,
+				PowerWattsMax:     powerWatts,
 			}
 			rr.nextDeviceID = dmID
 
@@ -700,7 +706,7 @@ func TestRackService_PlaceDevice_ManagementCapacityWarning(t *testing.T) {
 	// 10U rack, 500W capacity; management ToR uses 1U and 600W.
 	dmID := rr.nextDeviceID + 1
 	rr.deviceModels[dmID] = &models.DeviceModel{
-		ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWatts: 600,
+		ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWattsTypical: 600, PowerWattsMax: 600,
 	}
 	rr.nextDeviceID = dmID
 	rack, _ := svc.CreateRack("mgmt-rack", "", nil, nil, 10, 500)

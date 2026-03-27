@@ -18,16 +18,29 @@ func NewRackTypeStore(db *sql.DB) *RackTypeStore {
 	return &RackTypeStore{db: db}
 }
 
+// scanRackTemplate scans a row into a RackTemplate.
+func scanRackTemplate(dest *models.RackTemplate, row interface{ Scan(dest ...any) error }) error {
+	return row.Scan(
+		&dest.ID, &dest.Name, &dest.HeightU, &dest.PowerCapacityW,
+		&dest.PowerOversubPctWarn, &dest.PowerOversubPctMax,
+		&dest.Description, &dest.CreatedAt, &dest.UpdatedAt,
+	)
+}
+
 // Create inserts a new RackTemplate and returns the saved record.
 func (s *RackTypeStore) Create(rt *models.RackTemplate) (*models.RackTemplate, error) {
 	const q = `
-		INSERT INTO rack_types (name, height_u, power_capacity_w, description)
-		VALUES (?, ?, ?, ?)
-		RETURNING id, name, height_u, power_capacity_w, description, created_at, updated_at`
+		INSERT INTO rack_types (name, height_u, power_capacity_w,
+		                        power_oversub_pct_warn, power_oversub_pct_max, description)
+		VALUES (?, ?, ?, ?, ?, ?)
+		RETURNING id, name, height_u, power_capacity_w,
+		          power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at`
 
 	out := &models.RackTemplate{}
-	err := s.db.QueryRow(q, rt.Name, rt.HeightU, rt.PowerCapacityW, rt.Description).
-		Scan(&out.ID, &out.Name, &out.HeightU, &out.PowerCapacityW, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+	err := scanRackTemplate(out, s.db.QueryRow(q,
+		rt.Name, rt.HeightU, rt.PowerCapacityW,
+		rt.PowerOversubPctWarn, rt.PowerOversubPctMax, rt.Description,
+	))
 	if err != nil {
 		return nil, fmt.Errorf("create rack type: %w", err)
 	}
@@ -37,7 +50,8 @@ func (s *RackTypeStore) Create(rt *models.RackTemplate) (*models.RackTemplate, e
 // List returns all RackTemplate records ordered by id.
 func (s *RackTypeStore) List() ([]*models.RackTemplate, error) {
 	const q = `
-		SELECT id, name, height_u, power_capacity_w, description, created_at, updated_at
+		SELECT id, name, height_u, power_capacity_w,
+		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
 		FROM rack_types
 		ORDER BY id`
 
@@ -50,7 +64,7 @@ func (s *RackTypeStore) List() ([]*models.RackTemplate, error) {
 	var out []*models.RackTemplate
 	for rows.Next() {
 		rt := &models.RackTemplate{}
-		if err := rows.Scan(&rt.ID, &rt.Name, &rt.HeightU, &rt.PowerCapacityW, &rt.Description, &rt.CreatedAt, &rt.UpdatedAt); err != nil {
+		if err := scanRackTemplate(rt, rows); err != nil {
 			return nil, fmt.Errorf("scan rack type: %w", err)
 		}
 		out = append(out, rt)
@@ -64,13 +78,13 @@ func (s *RackTypeStore) List() ([]*models.RackTemplate, error) {
 // Get returns the RackTemplate with the given id, or models.ErrNotFound.
 func (s *RackTypeStore) Get(id int64) (*models.RackTemplate, error) {
 	const q = `
-		SELECT id, name, height_u, power_capacity_w, description, created_at, updated_at
+		SELECT id, name, height_u, power_capacity_w,
+		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
 		FROM rack_types
 		WHERE id = ?`
 
 	rt := &models.RackTemplate{}
-	err := s.db.QueryRow(q, id).
-		Scan(&rt.ID, &rt.Name, &rt.HeightU, &rt.PowerCapacityW, &rt.Description, &rt.CreatedAt, &rt.UpdatedAt)
+	err := scanRackTemplate(rt, s.db.QueryRow(q, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}
@@ -87,11 +101,11 @@ func (s *RackTypeStore) Update(rt *models.RackTemplate) (*models.RackTemplate, e
 		SET name = ?, height_u = ?, power_capacity_w = ?, description = ?,
 		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE id = ?
-		RETURNING id, name, height_u, power_capacity_w, description, created_at, updated_at`
+		RETURNING id, name, height_u, power_capacity_w,
+		          power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at`
 
 	out := &models.RackTemplate{}
-	err := s.db.QueryRow(q, rt.Name, rt.HeightU, rt.PowerCapacityW, rt.Description, rt.ID).
-		Scan(&out.ID, &out.Name, &out.HeightU, &out.PowerCapacityW, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+	err := scanRackTemplate(out, s.db.QueryRow(q, rt.Name, rt.HeightU, rt.PowerCapacityW, rt.Description, rt.ID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}

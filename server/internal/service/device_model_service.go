@@ -142,8 +142,42 @@ func validateDeviceModel(dm *models.DeviceModel) error {
 	if dm.HeightU < 1 || dm.HeightU > 50 {
 		return fmt.Errorf("%w: height_u must be between 1 and 50", models.ErrConstraintViolation)
 	}
-	if dm.PowerWatts < 0 {
-		return fmt.Errorf("%w: power_watts must not be negative", models.ErrConstraintViolation)
+	if dm.PowerWattsIdle < 0 {
+		return fmt.Errorf("%w: power_watts_idle must not be negative", models.ErrConstraintViolation)
+	}
+	if dm.PowerWattsTypical < 0 {
+		return fmt.Errorf("%w: power_watts_typical must not be negative", models.ErrConstraintViolation)
+	}
+	if dm.PowerWattsMax < 0 {
+		return fmt.Errorf("%w: power_watts_max must not be negative", models.ErrConstraintViolation)
+	}
+	if dm.CPUSockets < 0 {
+		return fmt.Errorf("%w: cpu_sockets must not be negative", models.ErrConstraintViolation)
+	}
+	if dm.CoresPerSocket < 0 {
+		return fmt.Errorf("%w: cores_per_socket must not be negative", models.ErrConstraintViolation)
+	}
+	if dm.RAMGB < 0 {
+		return fmt.Errorf("%w: ram_gb must not be negative", models.ErrConstraintViolation)
+	}
+	if dm.StorageTB < 0 {
+		return fmt.Errorf("%w: storage_tb must not be negative", models.ErrConstraintViolation)
+	}
+	if dm.GPUCount < 0 {
+		return fmt.Errorf("%w: gpu_count must not be negative", models.ErrConstraintViolation)
+	}
+	// Default device_model_type to "network" if not set.
+	if dm.DeviceModelType == "" {
+		dm.DeviceModelType = models.DeviceModelTypeNetwork
+	}
+	validTypes := map[models.DeviceModelType]bool{
+		models.DeviceModelTypeNetwork: true,
+		models.DeviceModelTypeServer:  true,
+		models.DeviceModelTypeStorage: true,
+		models.DeviceModelTypeOther:   true,
+	}
+	if !validTypes[dm.DeviceModelType] {
+		return fmt.Errorf("%w: device_model_type must be one of: network, server, storage, other", models.ErrConstraintViolation)
 	}
 	return nil
 }
