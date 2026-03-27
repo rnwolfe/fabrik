@@ -72,24 +72,26 @@ func TestOpen_ForeignKeysPerConnection(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Allow multiple connections so we actually get two distinct connections.
-	db.SetMaxOpenConns(5)
+	// Acquire two connections concurrently so the pool cannot reuse conn1 for conn2.
+	conn1, err := db.Conn(t.Context())
+	if err != nil {
+		t.Fatalf("conn1: acquire: %v", err)
+	}
+	defer conn1.Close()
 
-	check := func(label string) {
-		conn, err := db.Conn(t.Context())
-		if err != nil {
-			t.Fatalf("%s: acquire conn: %v", label, err)
-		}
-		defer conn.Close()
+	conn2, err := db.Conn(t.Context())
+	if err != nil {
+		t.Fatalf("conn2: acquire: %v", err)
+	}
+	defer conn2.Close()
+
+	for i, conn := range []*sql.Conn{conn1, conn2} {
 		var fk int
 		if err := conn.QueryRowContext(t.Context(), "PRAGMA foreign_keys").Scan(&fk); err != nil {
-			t.Fatalf("%s: query foreign_keys: %v", label, err)
+			t.Fatalf("conn%d: query foreign_keys: %v", i+1, err)
 		}
 		if fk != 1 {
-			t.Errorf("%s: expected foreign_keys=1, got %d", label, fk)
+			t.Errorf("conn%d: expected foreign_keys=1, got %d", i+1, fk)
 		}
 	}
-
-	check("conn1")
-	check("conn2")
 }

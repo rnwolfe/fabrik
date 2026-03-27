@@ -18,7 +18,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { Subject, from, switchMap, map, takeUntil } from 'rxjs';
+import { Subject, from, switchMap, map, takeUntil, catchError, of } from 'rxjs';
 import DOMPurify from 'dompurify';
 
 import { KnowledgeService } from '../../knowledge.service';
@@ -95,7 +95,13 @@ export class ArticleViewComponent implements OnInit, OnChanges {
                 return from(Promise.resolve({ article, rawHtml: null }));
               }
               return from(this.markdownRenderer.render(article.content)).pipe(
-                map((rawHtml) => ({ article, rawHtml })),
+                map((rawHtml) => ({ article, rawHtml: rawHtml as string | null })),
+                catchError((err) => {
+                  if (typeof ngDevMode !== 'undefined' && ngDevMode) {
+                    console.warn('ArticleViewComponent: render error', err);
+                  }
+                  return of({ article, rawHtml: null as string | null });
+                }),
               );
             }),
           ),
@@ -114,10 +120,13 @@ export class ArticleViewComponent implements OnInit, OnChanges {
               ADD_ATTR: ['target', 'data-knowledge-link'],
             });
             this.renderedHtml.set(this.sanitizer.bypassSecurityTrustHtml(safeHtml));
+            // Post-process Mermaid after DOM update — only when content exists
+            setTimeout(() => this.postProcessContent(), 0);
+          } else {
+            // Render failed or no content — clear stale HTML
+            this.renderedHtml.set(this.sanitizer.bypassSecurityTrustHtml(''));
           }
           this.loading.set(false);
-          // Post-process Mermaid after DOM update
-          setTimeout(() => this.postProcessContent(), 0);
         },
         error: (err) => {
           if (err.status === 404) {
