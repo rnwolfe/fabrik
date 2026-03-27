@@ -1,382 +1,432 @@
-<div class="topology-page">
-  <div class="page-header">
-    <div class="page-title">
-      <h1>Clos Fabric Designer</h1>
-      <p class="subtitle">Design multi-stage Clos topologies and assign hardware models.</p>
-    </div>
-    <div class="page-actions">
-      <mat-slide-toggle
-        [checked]="showManagementPlane()"
-        (change)="toggleManagementPlane()"
-        aria-label="Show management network plane"
-        matTooltip="Toggle management network plane visibility"
-        class="mgmt-plane-toggle"
-      >
-        <span class="toggle-label">Management Plane</span>
-      </mat-slide-toggle>
-      <button mat-raised-button color="primary" (click)="openCreateForm()" [disabled]="showForm()">
-        <mat-icon>add</mat-icon>
-        New Fabric
-      </button>
-    </div>
-  </div>
-
-  <!-- Fabric designer form -->
-  @if (showForm()) {
-    <mat-card class="designer-card">
-      <mat-card-header>
-        <mat-card-title>
-          {{ editingFabric() ? 'Edit Fabric' : 'New Clos Fabric' }}
-        </mat-card-title>
-        <mat-card-subtitle>
-          Configure topology parameters and assign device models.
-        </mat-card-subtitle>
-      </mat-card-header>
-
-      <mat-card-content>
-        <!-- Server warnings -->
-        @if (serverWarnings().length) {
-          <div class="warnings-container" role="alert">
-            @for (w of serverWarnings(); track w) {
-              <div class="warning-chip">
-                <mat-icon>warning</mat-icon>
-                <span>{{ w }}</span>
-              </div>
-            }
+<div class="topology-layout">
+  <app-split-pane storageKey="topology-designer" [initialLeftPct]="55" [minLeftPct]="25" [maxLeftPct]="75">
+    <!-- Left pane: Fabric designer -->
+    <div left class="designer-pane">
+      <div class="topology-page">
+        <div class="page-header">
+          <div class="page-title">
+            <h1>Clos Fabric Designer</h1>
+            <p class="subtitle">Design multi-stage Clos topologies and assign hardware models.</p>
           </div>
-        }
-
-        <form [formGroup]="form" class="designer-form" (ngSubmit)="saveFabric()">
-          <!-- Row 1: Name + Tier -->
-          <div class="form-row">
-            <mat-form-field appearance="outline" class="field-name">
-              <mat-label>Fabric name</mat-label>
-              <input matInput formControlName="name" placeholder="e.g. prod-fabric-a" autocomplete="off" />
-              @if (form.get('name')?.invalid && form.get('name')?.touched) {
-                <mat-error>Fabric name is required.</mat-error>
-              }
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" class="field-tier">
-              <mat-label>Tier</mat-label>
-              <mat-select formControlName="tier">
-                <mat-option value="frontend">Front-End</mat-option>
-                <mat-option value="backend">Back-End</mat-option>
-              </mat-select>
-            </mat-form-field>
+          <div class="page-actions">
+            <mat-slide-toggle
+              [checked]="showManagementPlane()"
+              (change)="toggleManagementPlane()"
+              aria-label="Show management network plane"
+              matTooltip="Toggle management network plane visibility"
+              class="mgmt-plane-toggle"
+            >
+              <span class="toggle-label">Management Plane</span>
+            </mat-slide-toggle>
+            <button mat-raised-button color="primary" (click)="openCreateForm()" [disabled]="showForm()">
+              <mat-icon>add</mat-icon>
+              New Fabric
+            </button>
           </div>
-
-          <!-- Row 2: Stages + Radix + Oversubscription -->
-          <div class="form-row">
-            <mat-form-field appearance="outline" class="field-stages">
-              <mat-label>Stage count</mat-label>
-              <mat-select formControlName="stages" aria-label="Number of Clos stages">
-                @for (s of stageCounts; track s) {
-                  <mat-option [value]="s">{{ stageLabel[s] }}</mat-option>
-                }
-              </mat-select>
-              <mat-hint>2, 3, or 5-stage Clos topology</mat-hint>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" class="field-radix">
-              <mat-label>Radix (port count)</mat-label>
-              <input
-                matInput
-                type="number"
-                formControlName="radix"
-                min="1"
-                aria-label="Switch radix (port count)"
-              />
-              @if (form.get('radix')?.invalid && form.get('radix')?.touched) {
-                <mat-error>Radix must be a positive integer.</mat-error>
-              }
-              <mat-hint>Ports per switch (e.g. 64)</mat-hint>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline" class="field-os">
-              <mat-label>Oversubscription</mat-label>
-              <input
-                matInput
-                type="number"
-                formControlName="oversubscription"
-                min="1"
-                step="0.5"
-                aria-label="Oversubscription ratio"
-              />
-              @if (form.get('oversubscription')?.invalid && form.get('oversubscription')?.touched) {
-                <mat-error>Oversubscription must be ≥ 1.0.</mat-error>
-              }
-              <mat-hint>Downlinks : uplinks ratio (≥ 1.0)</mat-hint>
-            </mat-form-field>
-          </div>
-
-          <!-- Description -->
-          <mat-form-field appearance="outline" class="field-full">
-            <mat-label>Description (optional)</mat-label>
-            <textarea matInput formControlName="description" rows="2"></textarea>
-          </mat-form-field>
-
-          <!-- Device model assignments -->
-          <div class="section-label">Device model assignments</div>
-
-          @if (!hasModels()) {
-            <div class="no-models-hint" role="status">
-              <mat-icon>info</mat-icon>
-              <span>
-                No device models in catalog.
-                <a routerLink="/catalog" class="inline-link">Add models in the Catalog</a>
-                to assign hardware platforms.
-              </span>
-            </div>
-          } @else {
-            <div class="form-row">
-              <mat-form-field appearance="outline" class="field-model">
-                <mat-label>Leaf model</mat-label>
-                <mat-select formControlName="leaf_model_id">
-                  <mat-option [value]="null">— none —</mat-option>
-                  @for (dm of deviceModels(); track dm.id) {
-                    <mat-option [value]="dm.id">{{ dm.vendor }} {{ dm.model }} ({{ dm.port_count }}p)</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="field-model">
-                <mat-label>Spine model</mat-label>
-                <mat-select formControlName="spine_model_id">
-                  <mat-option [value]="null">— none —</mat-option>
-                  @for (dm of deviceModels(); track dm.id) {
-                    <mat-option [value]="dm.id">{{ dm.vendor }} {{ dm.model }} ({{ dm.port_count }}p)</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-
-              @if (form.get('stages')?.value >= 3) {
-                <mat-form-field appearance="outline" class="field-model">
-                  <mat-label>Super-Spine model</mat-label>
-                  <mat-select formControlName="super_spine_model_id">
-                    <mat-option [value]="null">— none —</mat-option>
-                    @for (dm of deviceModels(); track dm.id) {
-                      <mat-option [value]="dm.id">{{ dm.vendor }} {{ dm.model }} ({{ dm.port_count }}p)</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-              }
-            </div>
-          }
-        </form>
-      </mat-card-content>
-
-      <!-- Live preview panel -->
-      <mat-divider></mat-divider>
-
-      <div class="preview-panel">
-        <div class="preview-header">
-          <span class="preview-title">
-            <mat-icon>preview</mat-icon>
-            Live Preview
-          </span>
-          @if (previewLoading()) {
-            <mat-spinner diameter="20"></mat-spinner>
-          }
         </div>
 
-        @if (previewError()) {
-          <div class="preview-error" role="alert">
-            <mat-icon>error_outline</mat-icon>
-            {{ previewError() }}
-          </div>
-        }
-
-        @if (livePreview(); as plan) {
-          <div class="preview-content">
-            @if (plan.radix_correction_note) {
-              <div class="correction-note" role="status">
-                <mat-icon>auto_fix_high</mat-icon>
-                {{ plan.radix_correction_note }}
-              </div>
-            }
-
-            <div class="preview-metrics">
-              <div class="metric-item">
-                <span class="metric-label">Total switches</span>
-                <span class="metric-value">{{ plan.total_switches }}</span>
-              </div>
-              <div class="metric-item">
-                <span class="metric-label">Host ports</span>
-                <span class="metric-value">{{ plan.total_host_ports }}</span>
-              </div>
-              <div class="metric-item">
-                <span class="metric-label">Oversubscription</span>
-                <span class="metric-value">{{ plan.oversubscription }}:1</span>
-              </div>
-              <div class="metric-item">
-                <span class="metric-label">Leaf uplinks</span>
-                <span class="metric-value">{{ plan.leaf_uplinks }}</span>
-              </div>
-              <div class="metric-item">
-                <span class="metric-label">Leaf downlinks</span>
-                <span class="metric-value">{{ plan.leaf_downlinks }}</span>
-              </div>
-            </div>
-
-            <div class="topology-layers">
-              @for (layer of stagesForPreview(plan); track layer.role) {
-                <div class="topology-layer">
-                  <span class="layer-role">{{ layer.role }}</span>
-                  <span class="layer-count">{{ layer.count }} switch{{ layer.count !== 1 ? 'es' : '' }}</span>
-                </div>
-              }
-            </div>
-          </div>
-        } @else if (!previewLoading() && !previewError()) {
-          <p class="preview-hint">Enter valid parameters to see the topology preview.</p>
-        }
-      </div>
-
-      <mat-card-actions align="end">
-        <button mat-button type="button" (click)="cancelForm()" [disabled]="isSaving()">
-          Cancel
-        </button>
-        <button
-          mat-raised-button
-          color="primary"
-          type="button"
-          (click)="saveFabric()"
-          [disabled]="isSaving() || form.invalid"
-        >
-          @if (isSaving()) {
-            <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-          }
-          {{ editingFabric() ? 'Update' : 'Create' }} Fabric
-        </button>
-      </mat-card-actions>
-    </mat-card>
-  }
-
-  <!-- Management plane panel -->
-  @if (showManagementPlane()) {
-    <section class="management-plane-panel" aria-label="Management network plane" role="region">
-      <mat-card class="mgmt-plane-card">
-        <mat-card-header>
-          <mat-card-title class="mgmt-plane-title">
-            <mat-icon class="mgmt-icon">settings_ethernet</mat-icon>
-            Management Network Plane
-          </mat-card-title>
-          <mat-card-subtitle>
-            Out-of-band management network. Each block has a management aggregation switch;
-            each rack has a management ToR that consumes RU and power.
-          </mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <div class="mgmt-legend">
-            <div class="mgmt-legend-item">
-              <span class="mgmt-node-dot mgmt-node-tor" aria-hidden="true"></span>
-              <span>Management ToR (rack-level)</span>
-            </div>
-            <div class="mgmt-legend-item">
-              <span class="mgmt-node-dot mgmt-node-agg" aria-hidden="true"></span>
-              <span>Management Aggregation (block-level)</span>
-            </div>
-            <div class="mgmt-legend-item">
-              <span class="mgmt-link-line" aria-hidden="true"></span>
-              <span>Management uplink</span>
-            </div>
-          </div>
-          <p class="mgmt-info">
-            Use <strong>device role</strong> <code>management_tor</code> when placing devices
-            in racks to mark management ToR switches. Use
-            <code>management_agg</code> for block aggregation switches.
-            Configure block management aggregation via the blocks API.
-          </p>
-        </mat-card-content>
-      </mat-card>
-    </section>
-  }
-
-  <!-- Fabric list -->
-  <section class="fabrics-list" aria-label="Existing fabrics">
-    @if (isLoading()) {
-      <div class="loading-state" role="status">
-        <mat-spinner diameter="40"></mat-spinner>
-        <p>Loading fabrics…</p>
-      </div>
-    } @else if (fabrics().length === 0) {
-      <div class="empty-state">
-        <mat-icon>device_hub</mat-icon>
-        <h2>No fabrics yet</h2>
-        <p>Create your first Clos fabric to get started.</p>
-        @if (!showForm()) {
-          <button mat-raised-button color="primary" (click)="openCreateForm()">
-            <mat-icon>add</mat-icon>
-            New Fabric
-          </button>
-        }
-      </div>
-    } @else {
-      <div class="fabric-grid">
-        @for (fabric of fabrics(); track fabric.id) {
-          <mat-card class="fabric-card">
+        <!-- Fabric designer form -->
+        @if (showForm()) {
+          <mat-card class="designer-card">
             <mat-card-header>
-              <mat-card-title>{{ fabric.name }}</mat-card-title>
+              <mat-card-title>
+                {{ editingFabric() ? 'Edit Fabric' : 'New Clos Fabric' }}
+              </mat-card-title>
               <mat-card-subtitle>
-                {{ stageLabel[fabric.stages] }} · {{ fabric.tier === 'frontend' ? 'Front-End' : 'Back-End' }}
+                Configure topology parameters and assign device models.
               </mat-card-subtitle>
             </mat-card-header>
 
             <mat-card-content>
-              @if (fabric.warnings?.length) {
-                <div class="fabric-warnings" role="status">
-                  @for (w of fabric.warnings!; track w) {
-                    <div class="warning-inline">
-                      <mat-icon>warning_amber</mat-icon>
-                      <small>{{ w }}</small>
+              <!-- Server warnings -->
+              @if (serverWarnings().length) {
+                <div class="warnings-container" role="alert">
+                  @for (w of serverWarnings(); track w) {
+                    <div class="warning-chip">
+                      <mat-icon>warning</mat-icon>
+                      <span>{{ w }}</span>
                     </div>
                   }
                 </div>
               }
 
-              <div class="fabric-metrics">
-                <div class="fabric-metric">
-                  <span class="metric-num">{{ fabric.metrics.total_switches }}</span>
-                  <span class="metric-lbl">switches</span>
-                </div>
-                <div class="fabric-metric">
-                  <span class="metric-num">{{ fabric.metrics.total_host_ports }}</span>
-                  <span class="metric-lbl">host ports</span>
-                </div>
-                <div class="fabric-metric">
-                  <span class="metric-num">{{ fabric.oversubscription }}:1</span>
-                  <span class="metric-lbl">oversubscription</span>
-                </div>
-              </div>
+              <form [formGroup]="form" class="designer-form" (ngSubmit)="saveFabric()">
+                <!-- Row 1: Name + Tier -->
+                <div class="form-row">
+                  <mat-form-field appearance="outline" class="field-name">
+                    <mat-label>Fabric name</mat-label>
+                    <input matInput formControlName="name" placeholder="e.g. prod-fabric-a" autocomplete="off" />
+                    @if (form.get('name')?.invalid && form.get('name')?.touched) {
+                      <mat-error>Fabric name is required.</mat-error>
+                    }
+                  </mat-form-field>
 
-              @if (fabric.description) {
-                <p class="fabric-desc">{{ fabric.description }}</p>
-              }
+                  <mat-form-field appearance="outline" class="field-tier">
+                    <mat-label>Tier</mat-label>
+                    <mat-select formControlName="tier">
+                      <mat-option value="frontend">Front-End</mat-option>
+                      <mat-option value="backend">Back-End</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+
+                <!-- Row 2: Stages + Radix + Oversubscription -->
+                <div class="form-row">
+                  <mat-form-field appearance="outline" class="field-stages">
+                    <mat-label>Stage count</mat-label>
+                    <mat-select formControlName="stages" aria-label="Number of Clos stages">
+                      @for (s of stageCounts; track s) {
+                        <mat-option [value]="s">{{ stageLabel[s] }}</mat-option>
+                      }
+                    </mat-select>
+                    <mat-hint>2, 3, or 5-stage Clos topology</mat-hint>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="field-radix">
+                    <mat-label>Radix (port count)</mat-label>
+                    <input
+                      matInput
+                      type="number"
+                      formControlName="radix"
+                      min="1"
+                      aria-label="Switch radix (port count)"
+                    />
+                    @if (form.get('radix')?.invalid && form.get('radix')?.touched) {
+                      <mat-error>Radix must be a positive integer.</mat-error>
+                    }
+                    <mat-hint>Ports per switch (e.g. 64)</mat-hint>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="field-os">
+                    <mat-label>Oversubscription</mat-label>
+                    <input
+                      matInput
+                      type="number"
+                      formControlName="oversubscription"
+                      min="1"
+                      step="0.5"
+                      aria-label="Oversubscription ratio"
+                    />
+                    @if (form.get('oversubscription')?.invalid && form.get('oversubscription')?.touched) {
+                      <mat-error>Oversubscription must be ≥ 1.0.</mat-error>
+                    }
+                    <mat-hint>Downlinks : uplinks ratio (≥ 1.0)</mat-hint>
+                  </mat-form-field>
+                </div>
+
+                <!-- Description -->
+                <mat-form-field appearance="outline" class="field-full">
+                  <mat-label>Description (optional)</mat-label>
+                  <textarea matInput formControlName="description" rows="2"></textarea>
+                </mat-form-field>
+
+                <!-- Device model assignments -->
+                <div class="section-label">Device model assignments</div>
+
+                @if (!hasModels()) {
+                  <div class="no-models-hint" role="status">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      No device models in catalog.
+                      <a routerLink="/catalog" class="inline-link">Add models in the Catalog</a>
+                      to assign hardware platforms.
+                    </span>
+                  </div>
+                } @else {
+                  <div class="form-row">
+                    <mat-form-field appearance="outline" class="field-model">
+                      <mat-label>Leaf model</mat-label>
+                      <mat-select formControlName="leaf_model_id">
+                        <mat-option [value]="null">— none —</mat-option>
+                        @for (dm of deviceModels(); track dm.id) {
+                          <mat-option [value]="dm.id">{{ dm.vendor }} {{ dm.model }} ({{ dm.port_count }}p)</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline" class="field-model">
+                      <mat-label>Spine model</mat-label>
+                      <mat-select formControlName="spine_model_id">
+                        <mat-option [value]="null">— none —</mat-option>
+                        @for (dm of deviceModels(); track dm.id) {
+                          <mat-option [value]="dm.id">{{ dm.vendor }} {{ dm.model }} ({{ dm.port_count }}p)</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+
+                    @if (form.get('stages')?.value >= 3) {
+                      <mat-form-field appearance="outline" class="field-model">
+                        <mat-label>Super-Spine model</mat-label>
+                        <mat-select formControlName="super_spine_model_id">
+                          <mat-option [value]="null">— none —</mat-option>
+                          @for (dm of deviceModels(); track dm.id) {
+                            <mat-option [value]="dm.id">{{ dm.vendor }} {{ dm.model }} ({{ dm.port_count }}p)</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                    }
+                  </div>
+                }
+              </form>
             </mat-card-content>
 
-            <mat-card-actions>
-              <button
-                mat-icon-button
-                aria-label="Edit fabric"
-                matTooltip="Edit"
-                (click)="openEditForm(fabric)"
-              >
-                <mat-icon>edit</mat-icon>
+            <!-- Live preview panel -->
+            <mat-divider></mat-divider>
+
+            <div class="preview-panel">
+              <div class="preview-header">
+                <span class="preview-title">
+                  <mat-icon>preview</mat-icon>
+                  Live Preview
+                </span>
+                @if (previewLoading()) {
+                  <mat-spinner diameter="20"></mat-spinner>
+                }
+              </div>
+
+              @if (previewError()) {
+                <div class="preview-error" role="alert">
+                  <mat-icon>error_outline</mat-icon>
+                  {{ previewError() }}
+                </div>
+              }
+
+              @if (livePreview(); as plan) {
+                <div class="preview-content">
+                  @if (plan.radix_correction_note) {
+                    <div class="correction-note" role="status">
+                      <mat-icon>auto_fix_high</mat-icon>
+                      {{ plan.radix_correction_note }}
+                    </div>
+                  }
+
+                  <div class="preview-metrics">
+                    <div class="metric-item">
+                      <span class="metric-label">Total switches</span>
+                      <span class="metric-value">{{ plan.total_switches }}</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Host ports</span>
+                      <span class="metric-value">{{ plan.total_host_ports }}</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Oversubscription</span>
+                      <span class="metric-value">{{ plan.oversubscription }}:1</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Leaf uplinks</span>
+                      <span class="metric-value">{{ plan.leaf_uplinks }}</span>
+                    </div>
+                    <div class="metric-item">
+                      <span class="metric-label">Leaf downlinks</span>
+                      <span class="metric-value">{{ plan.leaf_downlinks }}</span>
+                    </div>
+                  </div>
+
+                  <div class="topology-layers">
+                    @for (layer of stagesForPreview(plan); track layer.role) {
+                      <div class="topology-layer">
+                        <span class="layer-role">{{ layer.role }}</span>
+                        <span class="layer-count">{{ layer.count }} switch{{ layer.count !== 1 ? 'es' : '' }}</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              } @else if (!previewLoading() && !previewError()) {
+                <p class="preview-hint">Enter valid parameters to see the topology preview.</p>
+              }
+            </div>
+
+            <mat-card-actions align="end">
+              <button mat-button type="button" (click)="cancelForm()" [disabled]="isSaving()">
+                Cancel
               </button>
               <button
-                mat-icon-button
-                color="warn"
-                aria-label="Delete fabric"
-                matTooltip="Delete"
-                (click)="confirmDelete(fabric)"
+                mat-raised-button
+                color="primary"
+                type="button"
+                (click)="saveFabric()"
+                [disabled]="isSaving() || form.invalid"
               >
-                <mat-icon>delete</mat-icon>
+                @if (isSaving()) {
+                  <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+                }
+                {{ editingFabric() ? 'Update' : 'Create' }} Fabric
               </button>
             </mat-card-actions>
           </mat-card>
         }
+
+        <!-- Management plane panel -->
+        @if (showManagementPlane()) {
+          <section class="management-plane-panel" aria-label="Management network plane" role="region">
+            <mat-card class="mgmt-plane-card">
+              <mat-card-header>
+                <mat-card-title class="mgmt-plane-title">
+                  <mat-icon class="mgmt-icon">settings_ethernet</mat-icon>
+                  Management Network Plane
+                </mat-card-title>
+                <mat-card-subtitle>
+                  Out-of-band management network. Each block has a management aggregation switch;
+                  each rack has a management ToR that consumes RU and power.
+                </mat-card-subtitle>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="mgmt-legend">
+                  <div class="mgmt-legend-item">
+                    <span class="mgmt-node-dot mgmt-node-tor" aria-hidden="true"></span>
+                    <span>Management ToR (rack-level)</span>
+                  </div>
+                  <div class="mgmt-legend-item">
+                    <span class="mgmt-node-dot mgmt-node-agg" aria-hidden="true"></span>
+                    <span>Management Aggregation (block-level)</span>
+                  </div>
+                  <div class="mgmt-legend-item">
+                    <span class="mgmt-link-line" aria-hidden="true"></span>
+                    <span>Management uplink</span>
+                  </div>
+                </div>
+                <p class="mgmt-info">
+                  Use <strong>device role</strong> <code>management_tor</code> when placing devices
+                  in racks to mark management ToR switches. Use
+                  <code>management_agg</code> for block aggregation switches.
+                  Configure block management aggregation via the blocks API.
+                </p>
+              </mat-card-content>
+            </mat-card>
+          </section>
+        }
+
+        <!-- Fabric list -->
+        <section class="fabrics-list" aria-label="Existing fabrics">
+          @if (isLoading()) {
+            <div class="loading-state" role="status">
+              <mat-spinner diameter="40"></mat-spinner>
+              <p>Loading fabrics…</p>
+            </div>
+          } @else if (fabrics().length === 0) {
+            <div class="empty-state">
+              <mat-icon>device_hub</mat-icon>
+              <h2>No fabrics yet</h2>
+              <p>Create your first Clos fabric to get started.</p>
+              @if (!showForm()) {
+                <button mat-raised-button color="primary" (click)="openCreateForm()">
+                  <mat-icon>add</mat-icon>
+                  New Fabric
+                </button>
+              }
+            </div>
+          } @else {
+            <div class="fabric-grid">
+              @for (fabric of fabrics(); track fabric.id) {
+                <mat-card class="fabric-card">
+                  <mat-card-header>
+                    <mat-card-title>{{ fabric.name }}</mat-card-title>
+                    <mat-card-subtitle>
+                      {{ stageLabel[fabric.stages] }} · {{ fabric.tier === 'frontend' ? 'Front-End' : 'Back-End' }}
+                    </mat-card-subtitle>
+                  </mat-card-header>
+
+                  <mat-card-content>
+                    @if (fabric.warnings?.length) {
+                      <div class="fabric-warnings" role="status">
+                        @for (w of fabric.warnings!; track w) {
+                          <div class="warning-inline">
+                            <mat-icon>warning_amber</mat-icon>
+                            <small>{{ w }}</small>
+                          </div>
+                        }
+                      </div>
+                    }
+
+                    <div class="fabric-metrics">
+                      <div class="fabric-metric">
+                        <span class="metric-num">{{ fabric.metrics.total_switches }}</span>
+                        <span class="metric-lbl">switches</span>
+                      </div>
+                      <div class="fabric-metric">
+                        <span class="metric-num">{{ fabric.metrics.total_host_ports }}</span>
+                        <span class="metric-lbl">host ports</span>
+                      </div>
+                      <div class="fabric-metric">
+                        <span class="metric-num">{{ fabric.oversubscription }}:1</span>
+                        <span class="metric-lbl">oversubscription</span>
+                      </div>
+                    </div>
+
+                    @if (fabric.description) {
+                      <p class="fabric-desc">{{ fabric.description }}</p>
+                    }
+                  </mat-card-content>
+
+                  <mat-card-actions>
+                    <button
+                      mat-icon-button
+                      aria-label="Edit fabric"
+                      matTooltip="Edit"
+                      (click)="openEditForm(fabric)"
+                    >
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button
+                      mat-icon-button
+                      color="warn"
+                      aria-label="Delete fabric"
+                      matTooltip="Delete"
+                      (click)="confirmDelete(fabric)"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </mat-card-actions>
+                </mat-card>
+              }
+            </div>
+          }
+        </section>
       </div>
-    }
-  </section>
+    </div>
+
+    <!-- Right pane: Visualization -->
+    <div right class="viz-pane">
+      <div class="viz-header">
+        <span class="viz-title">
+          <mat-icon>account_tree</mat-icon>
+          Topology Visualization
+        </span>
+        <div class="viz-actions">
+          <button
+            mat-stroked-button
+            [color]="expandAllNodes() ? 'primary' : undefined"
+            (click)="toggleExpandAll()"
+            aria-label="Toggle expand all nodes"
+            matTooltip="{{ expandAllNodes() ? 'Collapse all' : 'Expand all' }} fabric nodes"
+          >
+            <mat-icon>{{ expandAllNodes() ? 'unfold_less' : 'unfold_more' }}</mat-icon>
+            {{ expandAllNodes() ? 'Collapse All' : 'Expand All' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Graph + detail split -->
+      <div class="viz-body" [class.has-detail]="selectedDetail() !== null">
+        <div class="viz-graph">
+          <app-topology-graph
+            [fabrics]="fabrics()"
+            [expandAll]="expandAllNodes()"
+            (nodeClick)="onNodeClick($event)"
+            (edgeClick)="onEdgeClick($event)"
+          ></app-topology-graph>
+        </div>
+
+        @if (selectedDetail() !== null) {
+          <div class="viz-detail">
+            <app-topology-detail-panel
+              [item]="selectedDetail()"
+              (closed)="onDetailClosed()"
+            ></app-topology-detail-panel>
+          </div>
+        }
+      </div>
+    </div>
+  </app-split-pane>
 </div>

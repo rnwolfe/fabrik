@@ -4,10 +4,37 @@ import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 
 import { TopologyComponent } from './topology.component';
 import { FabricService } from './fabric.service';
 import { FabricResponse, TopologyPlan } from '../../models/fabric';
+import { TopologyGraphComponent, NodeClickEvent, EdgeClickEvent } from './topology-graph.component';
+import { TopologyDetailPanelComponent, DetailItem } from './topology-detail-panel.component';
+
+/** Stub for TopologyGraphComponent to avoid Cytoscape canvas initialization in tests */
+@Component({
+  selector: 'app-topology-graph',
+  standalone: true,
+  template: '<div class="cy-stub"></div>',
+})
+class TopologyGraphStubComponent {
+  @Input() fabrics: FabricResponse[] = [];
+  @Input() expandAll = false;
+  @Output() nodeClick = new EventEmitter<NodeClickEvent>();
+  @Output() edgeClick = new EventEmitter<EdgeClickEvent>();
+}
+
+/** Stub for TopologyDetailPanelComponent */
+@Component({
+  selector: 'app-topology-detail-panel',
+  standalone: true,
+  template: '<div class="detail-stub"></div>',
+})
+class TopologyDetailPanelStubComponent {
+  @Input() item: DetailItem | null = null;
+  @Output() closed = new EventEmitter<void>();
+}
 
 const mockPlan: TopologyPlan = {
   stages: 2,
@@ -79,7 +106,12 @@ describe('TopologyComponent', () => {
         provideHttpClient(),
         { provide: FabricService, useValue: fabricSvc },
       ],
-    }).compileComponents();
+    })
+      .overrideComponent(TopologyComponent, {
+        remove: { imports: [TopologyGraphComponent, TopologyDetailPanelComponent] },
+        add: { imports: [TopologyGraphStubComponent, TopologyDetailPanelStubComponent] },
+      })
+      .compileComponents();
 
     fixture = TestBed.createComponent(TopologyComponent);
     component = fixture.componentInstance;
