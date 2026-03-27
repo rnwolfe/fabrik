@@ -227,7 +227,6 @@ func (s *BlockService) AddRackToBlock(rackID int64, blockID *int64, superBlockID
 	}
 
 	var allConns []*models.PortConnection
-	var warnings []string
 
 	for _, agg := range aggs {
 		dm, err := s.repo.GetDeviceModel(agg.DeviceModelID)
@@ -242,8 +241,9 @@ func (s *BlockService) AddRackToBlock(rackID int64, blockID *int64, superBlockID
 
 		available := dm.PortCount - allocated
 		if available < len(leafNames) {
+			needed := len(leafNames) - available
 			return nil, fmt.Errorf("%w: %d/%d ports allocated on %s agg; need %d more for %d leaves",
-				models.ErrAggPortsFull, allocated, dm.PortCount, agg.Plane, len(leafNames), len(leafNames))
+				models.ErrAggPortsFull, allocated, dm.PortCount, agg.Plane, needed, len(leafNames))
 		}
 
 		conns, err := s.repo.AllocatePorts(agg.ID, rackID, leafNames, allocated)
@@ -253,16 +253,11 @@ func (s *BlockService) AddRackToBlock(rackID int64, blockID *int64, superBlockID
 		allConns = append(allConns, conns...)
 	}
 
-	result := &models.AddRackToBlockResult{
+	slog.Info("rack added to block", "rackID", rackID, "blockID", block.ID, "connections", len(allConns))
+	return &models.AddRackToBlockResult{
 		Rack:        rack,
 		Connections: allConns,
-	}
-	if len(warnings) > 0 {
-		result.Warning = strings.Join(warnings, "; ")
-	}
-
-	slog.Info("rack added to block", "rackID", rackID, "blockID", block.ID, "connections", len(allConns))
-	return result, nil
+	}, nil
 }
 
 // RemoveRackFromBlock removes a rack from its block and deallocates all agg port connections.
