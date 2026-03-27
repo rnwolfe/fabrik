@@ -112,16 +112,19 @@ type Port struct {
 
 // DeviceModel represents a hardware platform catalog entry (e.g., Cisco 8000, Arista 7050).
 type DeviceModel struct {
-	ID          int64     `json:"id"`
-	Vendor      string    `json:"vendor"`
-	Model       string    `json:"model"`
-	PortCount   int       `json:"port_count"`
-	HeightU     int       `json:"height_u"`
-	PowerWatts  int       `json:"power_watts"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          int64      `json:"id"`
+	Vendor      string     `json:"vendor"`
+	Model       string     `json:"model"`
+	PortCount   int        `json:"port_count"`
+	HeightU     int        `json:"height_u"`
+	PowerWatts  int        `json:"power_watts"`
+	Description string     `json:"description"`
+	IsSeed      bool       `json:"is_seed"`
+	ArchivedAt  *time.Time `json:"archived_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
+
 
 // FabricTier enumerates whether a fabric tier is a front-end or back-end network.
 type FabricTier string
