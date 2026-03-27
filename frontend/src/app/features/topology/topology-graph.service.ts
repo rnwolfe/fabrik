@@ -172,7 +172,7 @@ export function fabricToElements(
       agg2: [],
     };
 
-    layers.forEach((layer, _layerIdx) => {
+    layers.forEach((layer) => {
       for (let i = 0; i < layer.count; i++) {
         const nodeId = `f${fid}-${layer.role}-${i}`;
         allNodeIds[layer.role].push(nodeId);

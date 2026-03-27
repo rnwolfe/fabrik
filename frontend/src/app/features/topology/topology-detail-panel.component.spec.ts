@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 
-import { TopologyDetailPanelComponent, DetailItem } from './topology-detail-panel.component';
+import { TopologyDetailPanelComponent } from './topology-detail-panel.component';
 import { NodeData, EdgeData } from './topology-graph.service';
 
 const mockNodeData: NodeData = {
