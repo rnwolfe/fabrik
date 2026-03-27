@@ -31,7 +31,7 @@ func newFakeRackSvc() *fakeRackService {
 	}
 }
 
-func (s *fakeRackService) CreateRackType(name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *fakeRackService) CreateRackType(name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%w: rack type name is required", models.ErrConstraintViolation)
 	}
@@ -39,7 +39,7 @@ func (s *fakeRackService) CreateRackType(name, description string, heightU, powe
 		return nil, fmt.Errorf("%w: height_u must be positive", models.ErrConstraintViolation)
 	}
 	s.nextTypeID++
-	rt := &models.RackTemplate{ID: s.nextTypeID, Name: name, HeightU: heightU, PowerCapacityW: powerCapacityW}
+	rt := &models.RackTemplate{ID: s.nextTypeID, Name: name, HeightU: heightU, PowerCapacityW: powerCapacityW, PowerOversubPctWarn: powerOversubPctWarn, PowerOversubPctMax: powerOversubPctMax}
 	s.rackTypes[rt.ID] = rt
 	return rt, nil
 }
@@ -62,7 +62,7 @@ func (s *fakeRackService) GetRackType(id int64) (*models.RackTemplate, error) {
 	return &cp, nil
 }
 
-func (s *fakeRackService) UpdateRackType(id int64, name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *fakeRackService) UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	rt, ok := s.rackTypes[id]
 	if !ok {
 		return nil, models.ErrNotFound
@@ -72,6 +72,8 @@ func (s *fakeRackService) UpdateRackType(id int64, name, description string, hei
 	}
 	rt.Name = name
 	rt.HeightU = heightU
+	rt.PowerOversubPctWarn = powerOversubPctWarn
+	rt.PowerOversubPctMax = powerOversubPctMax
 	cp := *rt
 	return &cp, nil
 }
@@ -214,8 +216,8 @@ func TestRackHandler_CreateRackType(t *testing.T) {
 
 func TestRackHandler_ListRackTypes(t *testing.T) {
 	svc := newFakeRackSvc()
-	svc.CreateRackType("type1", "", 42, 0)
-	svc.CreateRackType("type2", "", 24, 0)
+	svc.CreateRackType("type1", "", 42, 0, 0, 0)
+	svc.CreateRackType("type2", "", 24, 0, 0, 0)
 
 	h := handlers.NewRackHandler(svc)
 	req := httptest.NewRequest(http.MethodGet, "/api/rack-types", nil)
@@ -236,7 +238,7 @@ func TestRackHandler_ListRackTypes(t *testing.T) {
 
 func TestRackHandler_GetRackType(t *testing.T) {
 	svc := newFakeRackSvc()
-	svc.CreateRackType("get-type", "", 42, 0)
+	svc.CreateRackType("get-type", "", 42, 0, 0, 0)
 
 	h := handlers.NewRackHandler(svc)
 
@@ -265,7 +267,7 @@ func TestRackHandler_GetRackType(t *testing.T) {
 
 func TestRackHandler_DeleteRackType_Conflict(t *testing.T) {
 	svc := newFakeRackSvc()
-	svc.CreateRackType("type1", "", 42, 0)
+	svc.CreateRackType("type1", "", 42, 0, 0, 0)
 	typeID := int64(1)
 	// Create a rack referencing the type.
 	svc.CreateRack("rack1", "", nil, &typeID, 42, 0)
@@ -485,14 +487,14 @@ type errPlaceDeviceSvc struct {
 	err error
 }
 
-func (s *errPlaceDeviceSvc) CreateRackType(name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *errPlaceDeviceSvc) CreateRackType(name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	return nil, nil
 }
 func (s *errPlaceDeviceSvc) ListRackTypes() ([]*models.RackTemplate, error) { return nil, nil }
 func (s *errPlaceDeviceSvc) GetRackType(id int64) (*models.RackTemplate, error) {
 	return nil, nil
 }
-func (s *errPlaceDeviceSvc) UpdateRackType(id int64, name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *errPlaceDeviceSvc) UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	return nil, nil
 }
 func (s *errPlaceDeviceSvc) DeleteRackType(id int64) error { return nil }
@@ -522,12 +524,12 @@ func (s *errPlaceDeviceSvc) RemoveDevice(rackID, deviceID int64, compact bool) e
 
 type warningPlaceDeviceSvc struct{}
 
-func (s *warningPlaceDeviceSvc) CreateRackType(name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *warningPlaceDeviceSvc) CreateRackType(name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	return nil, nil
 }
 func (s *warningPlaceDeviceSvc) ListRackTypes() ([]*models.RackTemplate, error)  { return nil, nil }
 func (s *warningPlaceDeviceSvc) GetRackType(id int64) (*models.RackTemplate, error) { return nil, nil }
-func (s *warningPlaceDeviceSvc) UpdateRackType(id int64, name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *warningPlaceDeviceSvc) UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	return nil, nil
 }
 func (s *warningPlaceDeviceSvc) DeleteRackType(id int64) error { return nil }

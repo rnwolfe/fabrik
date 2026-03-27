@@ -60,6 +60,12 @@ func main() {
 	blockSvc := service.NewBlockService(blockStore)
 	blockHandler := handlers.NewBlockHandler(blockSvc)
 
+	// Wire up capacity aggregation
+	capacityStore := store.NewCapacityStore(db)
+	capacitySvc := service.NewCapacityService(capacityStore)
+	capacityHandler := handlers.NewCapacityHandler(capacitySvc)
+
+	// Wire up knowledge base
 	knowledgeSub, err := fs.Sub(docsFS, "docs/knowledge")
 	if err != nil {
 		slog.Error("failed to sub knowledge FS", "err", err)
@@ -75,7 +81,8 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok"}`)
 	})
 
-	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler, managementHandler)
+	// Register domain routes
+	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler, managementHandler, capacityHandler)
 
 	addr := ":8080"
 	if port := os.Getenv("FABRIK_PORT"); port != "" {

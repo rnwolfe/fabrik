@@ -9,11 +9,11 @@ import { Rack } from '../../../../models';
 
 const mockRacks: Rack[] = [
   {
-    id: 1, name: 'rack-01', height_u: 42, power_capacity_w: 10000,
+    id: 1, name: 'rack-01', height_u: 42, power_capacity_w: 10000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110,
     block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '',
   },
   {
-    id: 2, name: 'rack-02', height_u: 24, power_capacity_w: 5000,
+    id: 2, name: 'rack-02', height_u: 24, power_capacity_w: 5000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110,
     block_id: 3, rack_type_id: 1, description: 'Edge rack', created_at: '', updated_at: '',
   },
 ];

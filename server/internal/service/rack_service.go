@@ -8,7 +8,10 @@ import (
 	"github.com/rnwolfe/fabrik/server/internal/models"
 )
 
-const powerWarningThreshold = 0.80
+// defaultPowerOversubWarn and defaultPowerOversubMax define fallback thresholds
+// when a rack has not been explicitly configured.
+const defaultPowerOversubWarn = 100
+const defaultPowerOversubMax = 110
 
 // RackTypeRepository is the store interface for rack type operations.
 type RackTypeRepository interface {
@@ -62,8 +65,31 @@ func (s *RackService) WithManagementAllocator(alloc ManagementPortAllocator) *Ra
 
 // --- Rack Type operations ---
 
+// validatePowerOversubPct validates that the power oversubscription percent values are
+// internally consistent and within a reasonable upper bound.
+// warn must be > 0, max must be >= warn, and both must be <= 500.
+// Zero values are allowed — they indicate "use defaults" and are not validated.
+func validatePowerOversubPct(warn, max int) error {
+	if warn == 0 && max == 0 {
+		return nil // both unset — defaults will be applied at runtime
+	}
+	if warn <= 0 {
+		return fmt.Errorf("%w: power_oversub_pct_warn must be > 0", models.ErrConstraintViolation)
+	}
+	if max < warn {
+		return fmt.Errorf("%w: power_oversub_pct_max (%d) must be >= power_oversub_pct_warn (%d)", models.ErrConstraintViolation, max, warn)
+	}
+	if warn > 500 {
+		return fmt.Errorf("%w: power_oversub_pct_warn (%d) exceeds maximum allowed value of 500", models.ErrConstraintViolation, warn)
+	}
+	if max > 500 {
+		return fmt.Errorf("%w: power_oversub_pct_max (%d) exceeds maximum allowed value of 500", models.ErrConstraintViolation, max)
+	}
+	return nil
+}
+
 // CreateRackType validates and creates a new RackTemplate.
-func (s *RackService) CreateRackType(name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *RackService) CreateRackType(name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: rack type name is required", models.ErrConstraintViolation)
@@ -74,11 +100,16 @@ func (s *RackService) CreateRackType(name, description string, heightU, powerCap
 	if powerCapacityW < 0 {
 		return nil, fmt.Errorf("%w: power_capacity_w must be non-negative", models.ErrConstraintViolation)
 	}
+	if err := validatePowerOversubPct(powerOversubPctWarn, powerOversubPctMax); err != nil {
+		return nil, err
+	}
 	rt, err := s.typeRepo.Create(&models.RackTemplate{
-		Name:           name,
-		HeightU:        heightU,
-		PowerCapacityW: powerCapacityW,
-		Description:    description,
+		Name:               name,
+		HeightU:            heightU,
+		PowerCapacityW:     powerCapacityW,
+		PowerOversubPctWarn: powerOversubPctWarn,
+		PowerOversubPctMax:  powerOversubPctMax,
+		Description:        description,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create rack type: %w", err)
@@ -106,7 +137,7 @@ func (s *RackService) GetRackType(id int64) (*models.RackTemplate, error) {
 }
 
 // UpdateRackType updates a rack type's fields.
-func (s *RackService) UpdateRackType(id int64, name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error) {
+func (s *RackService) UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: rack type name is required", models.ErrConstraintViolation)
@@ -117,12 +148,17 @@ func (s *RackService) UpdateRackType(id int64, name, description string, heightU
 	if powerCapacityW < 0 {
 		return nil, fmt.Errorf("%w: power_capacity_w must be non-negative", models.ErrConstraintViolation)
 	}
+	if err := validatePowerOversubPct(powerOversubPctWarn, powerOversubPctMax); err != nil {
+		return nil, err
+	}
 	rt, err := s.typeRepo.Update(&models.RackTemplate{
-		ID:             id,
-		Name:           name,
-		HeightU:        heightU,
-		PowerCapacityW: powerCapacityW,
-		Description:    description,
+		ID:                  id,
+		Name:                name,
+		HeightU:             heightU,
+		PowerCapacityW:      powerCapacityW,
+		PowerOversubPctWarn: powerOversubPctWarn,
+		PowerOversubPctMax:  powerOversubPctMax,
+		Description:         description,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update rack type %d: %w", id, err)
@@ -211,25 +247,36 @@ func (s *RackService) GetRackSummary(id int64) (*models.RackSummary, error) {
 	}
 
 	usedU := 0
-	usedWatts := 0
+	usedIdle := 0
+	usedTypical := 0
+	usedMax := 0
 	for _, d := range devices {
 		usedU += d.HeightU
-		usedWatts += d.PowerWatts
+		usedIdle += d.PowerWattsIdle
+		usedTypical += d.PowerWattsTypical
+		usedMax += d.PowerWattsMax
 	}
 
 	summary := &models.RackSummary{
-		Rack:       *rack,
-		UsedU:      usedU,
-		AvailableU: rack.HeightU - usedU,
-		UsedWatts:  usedWatts,
-		Devices:    devices,
+		Rack:             *rack,
+		UsedU:            usedU,
+		AvailableU:       rack.HeightU - usedU,
+		UsedWattsIdle:    usedIdle,
+		UsedWattsTypical: usedTypical,
+		UsedWattsMax:     usedMax,
+		Devices:          devices,
 	}
 
-	// Power warning at >80% utilization.
+	// Power warning: typical draw against warn threshold.
 	if rack.PowerCapacityW > 0 {
-		ratio := float64(usedWatts) / float64(rack.PowerCapacityW)
-		if ratio > powerWarningThreshold {
-			summary.Warning = fmt.Sprintf("power utilization at %.0f%% (%.0fW / %dW)", ratio*100, float64(usedWatts), rack.PowerCapacityW)
+		warnPct := rack.PowerOversubPctWarn
+		if warnPct == 0 {
+			warnPct = defaultPowerOversubWarn
+		}
+		warnLimit := rack.PowerCapacityW * warnPct / 100
+		if usedTypical > warnLimit {
+			summary.Warning = fmt.Sprintf("power utilization at %.0f%% of capacity (%dW typical / %dW capacity)",
+				float64(usedTypical)/float64(rack.PowerCapacityW)*100, usedTypical, rack.PowerCapacityW)
 		}
 	}
 
@@ -295,10 +342,12 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 
 	// Compute used RU and power.
 	usedU := 0
-	usedWatts := 0
+	usedTypical := 0
+	usedMax := 0
 	for _, d := range existing {
 		usedU += d.HeightU
-		usedWatts += d.PowerWatts
+		usedTypical += d.PowerWattsTypical
+		usedMax += d.PowerWattsMax
 	}
 
 	// For management switches: RU/power overflow is a soft warning, not a hard block.
@@ -319,6 +368,21 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 	}
 
 	var ruWarning string
+
+	// Hard reject: max power draw would exceed power_oversub_pct_max (skip 0W devices; soft for management).
+	if dm.PowerWattsMax > 0 && rack.PowerCapacityW > 0 && !isManagementRole {
+		maxPct := rack.PowerOversubPctMax
+		if maxPct == 0 {
+			maxPct = defaultPowerOversubMax
+		}
+		maxLimit := rack.PowerCapacityW * maxPct / 100
+		newMax := usedMax + dm.PowerWattsMax
+		if newMax > maxLimit {
+			return nil, fmt.Errorf("%w: placing device would exceed max power budget: %dW used + %dW new = %dW > %dW (%d%% of %dW capacity)",
+				models.ErrConstraintViolation, usedMax, dm.PowerWattsMax, newMax, maxLimit, maxPct, rack.PowerCapacityW)
+		}
+	}
+
 
 	// Auto-suggest position if not specified.
 	if position == 0 {
@@ -404,20 +468,17 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 		}
 	}
 
-	// Soft warning: power capacity exceeded or approaching threshold.
+	// Soft warning: typical power draw would exceed warn threshold.
 	if rack.PowerCapacityW > 0 {
-		newTotal := usedWatts + dm.PowerWatts
-		if newTotal > rack.PowerCapacityW {
-			pwrMsg := fmt.Sprintf("power capacity exceeded: %dW used + %dW new = %dW > %dW capacity",
-				usedWatts, dm.PowerWatts, newTotal, rack.PowerCapacityW)
-			if ruWarning != "" {
-				result.Warning = ruWarning + "; " + pwrMsg
-			} else {
-				result.Warning = pwrMsg
-			}
-		} else if float64(newTotal)/float64(rack.PowerCapacityW) > powerWarningThreshold {
-			pwrMsg := fmt.Sprintf("power utilization at %.0f%% (%dW / %dW)",
-				float64(newTotal)/float64(rack.PowerCapacityW)*100, newTotal, rack.PowerCapacityW)
+		warnPct := rack.PowerOversubPctWarn
+		if warnPct == 0 {
+			warnPct = defaultPowerOversubWarn
+		}
+		warnLimit := rack.PowerCapacityW * warnPct / 100
+		newTypical := usedTypical + dm.PowerWattsTypical
+		if newTypical > warnLimit {
+			pwrMsg := fmt.Sprintf("power utilization at %.0f%% of capacity (%dW typical / %dW capacity)",
+				float64(newTypical)/float64(rack.PowerCapacityW)*100, newTypical, rack.PowerCapacityW)
 			if ruWarning != "" {
 				result.Warning = ruWarning + "; " + pwrMsg
 			} else {
@@ -505,15 +566,31 @@ func (s *RackService) MoveDeviceCrossRack(srcRackID, deviceID, dstRackID int64, 
 	}
 
 	usedU := 0
-	usedWatts := 0
+	usedTypical := 0
+	usedMax := 0
 	for _, d := range dstDevices {
 		usedU += d.HeightU
-		usedWatts += d.PowerWatts
+		usedTypical += d.PowerWattsTypical
+		usedMax += d.PowerWattsMax
 	}
 
 	// Hard reject: doesn't fit in destination rack.
 	if dm.HeightU > dstRack.HeightU-usedU {
 		return nil, fmt.Errorf("%w: device needs %dU but destination rack only has %dU available", models.ErrRUOverflow, dm.HeightU, dstRack.HeightU-usedU)
+	}
+
+	// Hard reject: max power draw would exceed power_oversub_pct_max in destination rack.
+	if dm.PowerWattsMax > 0 && dstRack.PowerCapacityW > 0 {
+		maxPct := dstRack.PowerOversubPctMax
+		if maxPct == 0 {
+			maxPct = defaultPowerOversubMax
+		}
+		maxLimit := dstRack.PowerCapacityW * maxPct / 100
+		newMax := usedMax + dm.PowerWattsMax
+		if newMax > maxLimit {
+			return nil, fmt.Errorf("%w: placing device would exceed max power budget in destination rack: %dW used + %dW new = %dW > %dW",
+				models.ErrConstraintViolation, usedMax, dm.PowerWattsMax, newMax, maxLimit)
+		}
 	}
 
 	if newPosition == 0 {
@@ -541,10 +618,18 @@ func (s *RackService) MoveDeviceCrossRack(srcRackID, deviceID, dstRackID int64, 
 
 	result := &models.PlaceDeviceResult{Device: d}
 
-	// Soft warning: power capacity exceeded in destination rack.
-	if dstRack.PowerCapacityW > 0 && usedWatts+dm.PowerWatts > dstRack.PowerCapacityW {
-		result.Warning = fmt.Sprintf("power capacity exceeded in destination rack: %dW used + %dW new = %dW > %dW capacity",
-			usedWatts, dm.PowerWatts, usedWatts+dm.PowerWatts, dstRack.PowerCapacityW)
+	// Soft warning: typical power draw would exceed warn threshold in destination rack.
+	if dstRack.PowerCapacityW > 0 {
+		warnPct := dstRack.PowerOversubPctWarn
+		if warnPct == 0 {
+			warnPct = defaultPowerOversubWarn
+		}
+		warnLimit := dstRack.PowerCapacityW * warnPct / 100
+		newTypical := usedTypical + dm.PowerWattsTypical
+		if newTypical > warnLimit {
+			result.Warning = fmt.Sprintf("power utilization at %.0f%% of capacity in destination rack (%dW typical / %dW capacity)",
+				float64(newTypical)/float64(dstRack.PowerCapacityW)*100, newTypical, dstRack.PowerCapacityW)
+		}
 	}
 
 	slog.Info("device moved cross-rack", "srcRackID", srcRackID, "dstRackID", dstRackID, "deviceID", deviceID)

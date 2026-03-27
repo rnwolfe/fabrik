@@ -119,7 +119,7 @@ func TestDeviceModelHandler_Create(t *testing.T) {
 	}{
 		{
 			name:       "valid",
-			body:       `{"vendor":"Acme","model":"Switch X","port_count":48,"height_u":1,"power_watts":300}`,
+			body:       `{"vendor":"Acme","model":"Switch X","port_count":48,"height_u":1,"power_watts_typical":300}`,
 			wantStatus: http.StatusCreated,
 		},
 		{

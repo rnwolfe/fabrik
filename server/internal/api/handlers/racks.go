@@ -13,10 +13,10 @@ import (
 // RackService is the business logic interface required by RackHandler.
 type RackService interface {
 	// Rack type operations
-	CreateRackType(name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error)
+	CreateRackType(name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error)
 	ListRackTypes() ([]*models.RackTemplate, error)
 	GetRackType(id int64) (*models.RackTemplate, error)
-	UpdateRackType(id int64, name, description string, heightU, powerCapacityW int) (*models.RackTemplate, error)
+	UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error)
 	DeleteRackType(id int64) error
 	// Rack operations
 	CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int) (*models.Rack, error)
@@ -44,10 +44,12 @@ func NewRackHandler(svc RackService) *RackHandler {
 // --- Rack Type handlers ---
 
 type createRackTypeRequest struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	HeightU        int    `json:"height_u"`
-	PowerCapacityW int    `json:"power_capacity_w"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
+	HeightU            int    `json:"height_u"`
+	PowerCapacityW     int    `json:"power_capacity_w"`
+	PowerOversubPctWarn int   `json:"power_oversub_pct_warn"`
+	PowerOversubPctMax  int   `json:"power_oversub_pct_max"`
 }
 
 // CreateRackType handles POST /api/rack-types.
@@ -64,7 +66,7 @@ func (h *RackHandler) CreateRackType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rt, err := h.svc.CreateRackType(req.Name, req.Description, req.HeightU, req.PowerCapacityW)
+	rt, err := h.svc.CreateRackType(req.Name, req.Description, req.HeightU, req.PowerCapacityW, req.PowerOversubPctWarn, req.PowerOversubPctMax)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
@@ -127,7 +129,7 @@ func (h *RackHandler) UpdateRackType(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	rt, err := h.svc.UpdateRackType(id, req.Name, req.Description, req.HeightU, req.PowerCapacityW)
+	rt, err := h.svc.UpdateRackType(id, req.Name, req.Description, req.HeightU, req.PowerCapacityW, req.PowerOversubPctWarn, req.PowerOversubPctMax)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rack type not found")

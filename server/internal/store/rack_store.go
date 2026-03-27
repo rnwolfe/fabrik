@@ -18,16 +18,30 @@ func NewRackStore(db *sql.DB) *RackStore {
 	return &RackStore{db: db}
 }
 
+// scanRack scans a row into a Rack.
+func scanRack(dest *models.Rack, row interface{ Scan(dest ...any) error }) error {
+	return row.Scan(
+		&dest.ID, &dest.BlockID, &dest.RackTypeID, &dest.Name,
+		&dest.HeightU, &dest.PowerCapacityW,
+		&dest.PowerOversubPctWarn, &dest.PowerOversubPctMax,
+		&dest.Description, &dest.CreatedAt, &dest.UpdatedAt,
+	)
+}
+
 // Create inserts a new Rack and returns the saved record.
 func (s *RackStore) Create(r *models.Rack) (*models.Rack, error) {
 	const q = `
-		INSERT INTO racks (block_id, rack_type_id, name, height_u, power_capacity_w, description)
-		VALUES (?, ?, ?, ?, ?, ?)
-		RETURNING id, block_id, rack_type_id, name, height_u, power_capacity_w, description, created_at, updated_at`
+		INSERT INTO racks (block_id, rack_type_id, name, height_u, power_capacity_w,
+		                   power_oversub_pct_warn, power_oversub_pct_max, description)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		          power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at`
 
 	out := &models.Rack{}
-	err := s.db.QueryRow(q, r.BlockID, r.RackTypeID, r.Name, r.HeightU, r.PowerCapacityW, r.Description).
-		Scan(&out.ID, &out.BlockID, &out.RackTypeID, &out.Name, &out.HeightU, &out.PowerCapacityW, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+	err := scanRack(out, s.db.QueryRow(q,
+		r.BlockID, r.RackTypeID, r.Name, r.HeightU, r.PowerCapacityW,
+		r.PowerOversubPctWarn, r.PowerOversubPctMax, r.Description,
+	))
 	if err != nil {
 		return nil, fmt.Errorf("create rack: %w", err)
 	}
@@ -37,7 +51,8 @@ func (s *RackStore) Create(r *models.Rack) (*models.Rack, error) {
 // List returns all Rack records, optionally filtered by block_id.
 func (s *RackStore) List(blockID *int64) ([]*models.Rack, error) {
 	q := `
-		SELECT id, block_id, rack_type_id, name, height_u, power_capacity_w, description, created_at, updated_at
+		SELECT id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
 		FROM racks`
 	args := []any{}
 
@@ -56,7 +71,7 @@ func (s *RackStore) List(blockID *int64) ([]*models.Rack, error) {
 	var out []*models.Rack
 	for rows.Next() {
 		r := &models.Rack{}
-		if err := rows.Scan(&r.ID, &r.BlockID, &r.RackTypeID, &r.Name, &r.HeightU, &r.PowerCapacityW, &r.Description, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := scanRack(r, rows); err != nil {
 			return nil, fmt.Errorf("scan rack: %w", err)
 		}
 		out = append(out, r)
@@ -70,13 +85,13 @@ func (s *RackStore) List(blockID *int64) ([]*models.Rack, error) {
 // Get returns the Rack with the given id, or models.ErrNotFound.
 func (s *RackStore) Get(id int64) (*models.Rack, error) {
 	const q = `
-		SELECT id, block_id, rack_type_id, name, height_u, power_capacity_w, description, created_at, updated_at
+		SELECT id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
 		FROM racks
 		WHERE id = ?`
 
 	r := &models.Rack{}
-	err := s.db.QueryRow(q, id).
-		Scan(&r.ID, &r.BlockID, &r.RackTypeID, &r.Name, &r.HeightU, &r.PowerCapacityW, &r.Description, &r.CreatedAt, &r.UpdatedAt)
+	err := scanRack(r, s.db.QueryRow(q, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}
@@ -93,11 +108,11 @@ func (s *RackStore) Update(r *models.Rack) (*models.Rack, error) {
 		SET block_id = ?, name = ?, description = ?,
 		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE id = ?
-		RETURNING id, block_id, rack_type_id, name, height_u, power_capacity_w, description, created_at, updated_at`
+		RETURNING id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		          power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at`
 
 	out := &models.Rack{}
-	err := s.db.QueryRow(q, r.BlockID, r.Name, r.Description, r.ID).
-		Scan(&out.ID, &out.BlockID, &out.RackTypeID, &out.Name, &out.HeightU, &out.PowerCapacityW, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+	err := scanRack(out, s.db.QueryRow(q, r.BlockID, r.Name, r.Description, r.ID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}
@@ -224,7 +239,9 @@ func (s *RackStore) RemoveDevice(deviceID int64, compact bool) error {
 func (s *RackStore) ListDevicesInRack(rackID int64) ([]*models.DeviceSummary, error) {
 	const q = `
 		SELECT d.id, d.rack_id, d.device_model_id, d.name, d.role, d.position, d.description, d.created_at, d.updated_at,
-		       dm.vendor, dm.model, dm.height_u, dm.power_watts
+		       dm.vendor, dm.model, dm.device_model_type, dm.height_u,
+		       dm.power_watts_idle, dm.power_watts_typical, dm.power_watts_max,
+		       dm.cpu_sockets, dm.cores_per_socket, dm.ram_gb, dm.storage_tb, dm.gpu_count
 		FROM devices d
 		JOIN device_models dm ON d.device_model_id = dm.id
 		WHERE d.rack_id = ?
@@ -243,7 +260,9 @@ func (s *RackStore) ListDevicesInRack(rackID int64) ([]*models.DeviceSummary, er
 			&ds.Device.ID, &ds.Device.RackID, &ds.Device.DeviceModelID,
 			&ds.Device.Name, &ds.Device.Role, &ds.Device.Position, &ds.Device.Description,
 			&ds.Device.CreatedAt, &ds.Device.UpdatedAt,
-			&ds.ModelVendor, &ds.ModelName, &ds.HeightU, &ds.PowerWatts,
+			&ds.ModelVendor, &ds.ModelName, &ds.ModelType, &ds.HeightU,
+			&ds.PowerWattsIdle, &ds.PowerWattsTypical, &ds.PowerWattsMax,
+			&ds.CPUSockets, &ds.CoresPerSocket, &ds.RAMGB, &ds.StorageTB, &ds.GPUCount,
 		); err != nil {
 			return nil, fmt.Errorf("scan device summary: %w", err)
 		}
@@ -258,13 +277,22 @@ func (s *RackStore) ListDevicesInRack(rackID int64) ([]*models.DeviceSummary, er
 // GetDeviceModel returns the DeviceModel with the given id.
 func (s *RackStore) GetDeviceModel(id int64) (*models.DeviceModel, error) {
 	const q = `
-		SELECT id, vendor, model, port_count, height_u, power_watts, description, created_at, updated_at
+		SELECT id, vendor, model, device_model_type,
+		       port_count, height_u,
+		       power_watts_idle, power_watts_typical, power_watts_max,
+		       cpu_sockets, cores_per_socket, ram_gb, storage_tb, gpu_count,
+		       description, created_at, updated_at
 		FROM device_models
 		WHERE id = ?`
 
 	dm := &models.DeviceModel{}
-	err := s.db.QueryRow(q, id).
-		Scan(&dm.ID, &dm.Vendor, &dm.Model, &dm.PortCount, &dm.HeightU, &dm.PowerWatts, &dm.Description, &dm.CreatedAt, &dm.UpdatedAt)
+	err := s.db.QueryRow(q, id).Scan(
+		&dm.ID, &dm.Vendor, &dm.Model, &dm.DeviceModelType,
+		&dm.PortCount, &dm.HeightU,
+		&dm.PowerWattsIdle, &dm.PowerWattsTypical, &dm.PowerWattsMax,
+		&dm.CPUSockets, &dm.CoresPerSocket, &dm.RAMGB, &dm.StorageTB, &dm.GPUCount,
+		&dm.Description, &dm.CreatedAt, &dm.UpdatedAt,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}

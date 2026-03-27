@@ -31,12 +31,20 @@ func NewDeviceModelHandler(svc DeviceModelService) *DeviceModelHandler {
 
 // createDeviceModelRequest is the JSON body for POST /api/catalog/devices.
 type createDeviceModelRequest struct {
-	Vendor      string `json:"vendor"`
-	Model       string `json:"model"`
-	PortCount   int    `json:"port_count"`
-	HeightU     int    `json:"height_u"`
-	PowerWatts  int    `json:"power_watts"`
-	Description string `json:"description"`
+	Vendor            string                  `json:"vendor"`
+	Model             string                  `json:"model"`
+	DeviceModelType   models.DeviceModelType  `json:"device_model_type"`
+	PortCount         int                     `json:"port_count"`
+	HeightU           int                     `json:"height_u"`
+	PowerWattsIdle    int                     `json:"power_watts_idle"`
+	PowerWattsTypical int                     `json:"power_watts_typical"`
+	PowerWattsMax     int                     `json:"power_watts_max"`
+	CPUSockets        int                     `json:"cpu_sockets"`
+	CoresPerSocket    int                     `json:"cores_per_socket"`
+	RAMGB             int                     `json:"ram_gb"`
+	StorageTB         float64                 `json:"storage_tb"`
+	GPUCount          int                     `json:"gpu_count"`
+	Description       string                  `json:"description"`
 }
 
 // Create handles POST /api/catalog/devices.
@@ -55,12 +63,20 @@ func (h *DeviceModelHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dm := &models.DeviceModel{
-		Vendor:      req.Vendor,
-		Model:       req.Model,
-		PortCount:   req.PortCount,
-		HeightU:     req.HeightU,
-		PowerWatts:  req.PowerWatts,
-		Description: req.Description,
+		Vendor:            req.Vendor,
+		Model:             req.Model,
+		DeviceModelType:   req.DeviceModelType,
+		PortCount:         req.PortCount,
+		HeightU:           req.HeightU,
+		PowerWattsIdle:    req.PowerWattsIdle,
+		PowerWattsTypical: req.PowerWattsTypical,
+		PowerWattsMax:     req.PowerWattsMax,
+		CPUSockets:        req.CPUSockets,
+		CoresPerSocket:    req.CoresPerSocket,
+		RAMGB:             req.RAMGB,
+		StorageTB:         req.StorageTB,
+		GPUCount:          req.GPUCount,
+		Description:       req.Description,
 	}
 
 	out, err := h.svc.CreateDeviceModel(dm)
@@ -120,12 +136,20 @@ func (h *DeviceModelHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // updateDeviceModelRequest is the JSON body for PUT /api/catalog/devices/:id.
 type updateDeviceModelRequest struct {
-	Vendor      string `json:"vendor"`
-	Model       string `json:"model"`
-	PortCount   int    `json:"port_count"`
-	HeightU     int    `json:"height_u"`
-	PowerWatts  int    `json:"power_watts"`
-	Description string `json:"description"`
+	Vendor            string                  `json:"vendor"`
+	Model             string                  `json:"model"`
+	DeviceModelType   models.DeviceModelType  `json:"device_model_type"`
+	PortCount         int                     `json:"port_count"`
+	HeightU           int                     `json:"height_u"`
+	PowerWattsIdle    int                     `json:"power_watts_idle"`
+	PowerWattsTypical int                     `json:"power_watts_typical"`
+	PowerWattsMax     int                     `json:"power_watts_max"`
+	CPUSockets        int                     `json:"cpu_sockets"`
+	CoresPerSocket    int                     `json:"cores_per_socket"`
+	RAMGB             int                     `json:"ram_gb"`
+	StorageTB         float64                 `json:"storage_tb"`
+	GPUCount          int                     `json:"gpu_count"`
+	Description       string                  `json:"description"`
 }
 
 // Update handles PUT /api/catalog/devices/:id.
@@ -149,13 +173,21 @@ func (h *DeviceModelHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dm := &models.DeviceModel{
-		ID:          id,
-		Vendor:      req.Vendor,
-		Model:       req.Model,
-		PortCount:   req.PortCount,
-		HeightU:     req.HeightU,
-		PowerWatts:  req.PowerWatts,
-		Description: req.Description,
+		ID:                id,
+		Vendor:            req.Vendor,
+		Model:             req.Model,
+		DeviceModelType:   req.DeviceModelType,
+		PortCount:         req.PortCount,
+		HeightU:           req.HeightU,
+		PowerWattsIdle:    req.PowerWattsIdle,
+		PowerWattsTypical: req.PowerWattsTypical,
+		PowerWattsMax:     req.PowerWattsMax,
+		CPUSockets:        req.CPUSockets,
+		CoresPerSocket:    req.CoresPerSocket,
+		RAMGB:             req.RAMGB,
+		StorageTB:         req.StorageTB,
+		GPUCount:          req.GPUCount,
+		Description:       req.Description,
 	}
 
 	out, err := h.svc.UpdateDeviceModel(dm)

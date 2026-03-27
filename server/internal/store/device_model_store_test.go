@@ -17,7 +17,7 @@ func TestDeviceModelStore_Create(t *testing.T) {
 		Model:      "Switch X",
 		PortCount:  48,
 		HeightU:    1,
-		PowerWatts: 300,
+		PowerWattsTypical: 300,
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -116,7 +116,7 @@ func TestDeviceModelStore_Update(t *testing.T) {
 		Model:      "NewModel",
 		HeightU:    2,
 		PortCount:  48,
-		PowerWatts: 500,
+		PowerWattsTypical: 500,
 	})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
@@ -189,7 +189,7 @@ func TestDeviceModelStore_Duplicate(t *testing.T) {
 		Model:       "DupModel",
 		PortCount:   32,
 		HeightU:     2,
-		PowerWatts:  400,
+		PowerWattsTypical:  400,
 		Description: "original",
 	})
 

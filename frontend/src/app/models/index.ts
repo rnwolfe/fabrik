@@ -1,5 +1,6 @@
 export * from './block';
 export * from './block-aggregation';
+export * from './capacity';
 export * from './design';
 export * from './device';
 export * from './device-model';

@@ -36,9 +36,9 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="form-col">
-        <mat-label>Power (W)</mat-label>
-        <input matInput type="number" formControlName="power_watts" aria-label="Power in watts" />
-        @if (form.get('power_watts')?.hasError('min') && form.get('power_watts')?.touched) {
+        <mat-label>Power Typical (W)</mat-label>
+        <input matInput type="number" formControlName="power_watts_typical" aria-label="Typical power in watts" />
+        @if (form.get('power_watts_typical')?.hasError('min') && form.get('power_watts_typical')?.touched) {
           <mat-error>Power must not be negative</mat-error>
         }
       </mat-form-field>

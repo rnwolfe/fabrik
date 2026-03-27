@@ -27,8 +27,10 @@ func scanDeviceModel(row interface {
 	dm := &models.DeviceModel{}
 	var archivedAt sql.NullTime
 	err := row.Scan(
-		&dm.ID, &dm.Vendor, &dm.Model,
-		&dm.PortCount, &dm.HeightU, &dm.PowerWatts,
+		&dm.ID, &dm.Vendor, &dm.Model, &dm.DeviceModelType,
+		&dm.PortCount, &dm.HeightU,
+		&dm.PowerWattsIdle, &dm.PowerWattsTypical, &dm.PowerWattsMax,
+		&dm.CPUSockets, &dm.CoresPerSocket, &dm.RAMGB, &dm.StorageTB, &dm.GPUCount,
 		&dm.Description, &dm.IsSeed, &archivedAt,
 		&dm.CreatedAt, &dm.UpdatedAt,
 	)
@@ -44,15 +46,32 @@ func scanDeviceModel(row interface {
 
 // Create inserts a new DeviceModel and returns the saved record.
 func (s *DeviceModelStore) Create(dm *models.DeviceModel) (*models.DeviceModel, error) {
+	// Default type to "network" if not specified.
+	modelType := dm.DeviceModelType
+	if modelType == "" {
+		modelType = models.DeviceModelTypeNetwork
+	}
+
 	const q = `
-		INSERT INTO device_models (vendor, model, port_count, height_u, power_watts, description, is_seed)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, vendor, model, port_count, height_u, power_watts, description, is_seed,
-		          archived_at, created_at, updated_at`
+		INSERT INTO device_models (
+			vendor, model, device_model_type,
+			port_count, height_u,
+			power_watts_idle, power_watts_typical, power_watts_max,
+			cpu_sockets, cores_per_socket, ram_gb, storage_tb, gpu_count,
+			description, is_seed
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, vendor, model, device_model_type,
+		          port_count, height_u,
+		          power_watts_idle, power_watts_typical, power_watts_max,
+		          cpu_sockets, cores_per_socket, ram_gb, storage_tb, gpu_count,
+		          description, is_seed, archived_at, created_at, updated_at`
 
 	row := s.db.QueryRow(q,
-		dm.Vendor, dm.Model, dm.PortCount, dm.HeightU,
-		dm.PowerWatts, dm.Description, dm.IsSeed,
+		dm.Vendor, dm.Model, modelType,
+		dm.PortCount, dm.HeightU,
+		dm.PowerWattsIdle, dm.PowerWattsTypical, dm.PowerWattsMax,
+		dm.CPUSockets, dm.CoresPerSocket, dm.RAMGB, dm.StorageTB, dm.GPUCount,
+		dm.Description, dm.IsSeed,
 	)
 	out, err := scanDeviceModel(row)
 	if err != nil {
@@ -68,8 +87,11 @@ func (s *DeviceModelStore) Create(dm *models.DeviceModel) (*models.DeviceModel, 
 // archived models are included as well.
 func (s *DeviceModelStore) List(includeArchived bool) ([]*models.DeviceModel, error) {
 	q := `
-		SELECT id, vendor, model, port_count, height_u, power_watts, description, is_seed,
-		       archived_at, created_at, updated_at
+		SELECT id, vendor, model, device_model_type,
+		       port_count, height_u,
+		       power_watts_idle, power_watts_typical, power_watts_max,
+		       cpu_sockets, cores_per_socket, ram_gb, storage_tb, gpu_count,
+		       description, is_seed, archived_at, created_at, updated_at
 		FROM device_models`
 	if !includeArchived {
 		q += " WHERE archived_at IS NULL"
@@ -99,8 +121,11 @@ func (s *DeviceModelStore) List(includeArchived bool) ([]*models.DeviceModel, er
 // Get returns the DeviceModel with the given id, or models.ErrNotFound.
 func (s *DeviceModelStore) Get(id int64) (*models.DeviceModel, error) {
 	const q = `
-		SELECT id, vendor, model, port_count, height_u, power_watts, description, is_seed,
-		       archived_at, created_at, updated_at
+		SELECT id, vendor, model, device_model_type,
+		       port_count, height_u,
+		       power_watts_idle, power_watts_typical, power_watts_max,
+		       cpu_sockets, cores_per_socket, ram_gb, storage_tb, gpu_count,
+		       description, is_seed, archived_at, created_at, updated_at
 		FROM device_models
 		WHERE id = ?`
 
@@ -117,18 +142,33 @@ func (s *DeviceModelStore) Get(id int64) (*models.DeviceModel, error) {
 // Update modifies an existing DeviceModel. Returns models.ErrNotFound if it
 // does not exist.
 func (s *DeviceModelStore) Update(dm *models.DeviceModel) (*models.DeviceModel, error) {
+	// Default type to "network" if not specified.
+	modelType := dm.DeviceModelType
+	if modelType == "" {
+		modelType = models.DeviceModelTypeNetwork
+	}
+
 	const q = `
 		UPDATE device_models
-		SET vendor = ?, model = ?, port_count = ?, height_u = ?,
-		    power_watts = ?, description = ?,
+		SET vendor = ?, model = ?, device_model_type = ?,
+		    port_count = ?, height_u = ?,
+		    power_watts_idle = ?, power_watts_typical = ?, power_watts_max = ?,
+		    cpu_sockets = ?, cores_per_socket = ?, ram_gb = ?, storage_tb = ?, gpu_count = ?,
+		    description = ?,
 		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE id = ?
-		RETURNING id, vendor, model, port_count, height_u, power_watts, description, is_seed,
-		          archived_at, created_at, updated_at`
+		RETURNING id, vendor, model, device_model_type,
+		          port_count, height_u,
+		          power_watts_idle, power_watts_typical, power_watts_max,
+		          cpu_sockets, cores_per_socket, ram_gb, storage_tb, gpu_count,
+		          description, is_seed, archived_at, created_at, updated_at`
 
 	row := s.db.QueryRow(q,
-		dm.Vendor, dm.Model, dm.PortCount, dm.HeightU,
-		dm.PowerWatts, dm.Description, dm.ID,
+		dm.Vendor, dm.Model, modelType,
+		dm.PortCount, dm.HeightU,
+		dm.PowerWattsIdle, dm.PowerWattsTypical, dm.PowerWattsMax,
+		dm.CPUSockets, dm.CoresPerSocket, dm.RAMGB, dm.StorageTB, dm.GPUCount,
+		dm.Description, dm.ID,
 	)
 	out, err := scanDeviceModel(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -174,14 +214,22 @@ func (s *DeviceModelStore) Duplicate(sourceID int64, newVendor, newModel string)
 	}
 
 	copy := &models.DeviceModel{
-		Vendor:      newVendor,
-		Model:       newModel,
-		PortCount:   src.PortCount,
-		HeightU:     src.HeightU,
-		PowerWatts:  src.PowerWatts,
-		Description: src.Description,
-		IsSeed:      false,
-		ArchivedAt:  nil,
+		Vendor:            newVendor,
+		Model:             newModel,
+		DeviceModelType:   src.DeviceModelType,
+		PortCount:         src.PortCount,
+		HeightU:           src.HeightU,
+		PowerWattsIdle:    src.PowerWattsIdle,
+		PowerWattsTypical: src.PowerWattsTypical,
+		PowerWattsMax:     src.PowerWattsMax,
+		CPUSockets:        src.CPUSockets,
+		CoresPerSocket:    src.CoresPerSocket,
+		RAMGB:             src.RAMGB,
+		StorageTB:         src.StorageTB,
+		GPUCount:          src.GPUCount,
+		Description:       src.Description,
+		IsSeed:            false,
+		ArchivedAt:        nil,
 	}
 
 	// Ensure the new name is a copy marker if defaults were not supplied.

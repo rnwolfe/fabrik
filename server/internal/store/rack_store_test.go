@@ -196,7 +196,7 @@ func TestRackStore_DevicePlacement(t *testing.T) {
 	// Seed a device model.
 	var dmID int64
 	err := db.QueryRow(`
-		INSERT INTO device_models (vendor, model, port_count, height_u, power_watts)
+		INSERT INTO device_models (vendor, model, port_count, height_u, power_watts_typical)
 		VALUES ('Cisco', 'ASR9000', 32, 2, 500)
 		RETURNING id`).Scan(&dmID)
 	if err != nil {

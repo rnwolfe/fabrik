@@ -22,7 +22,7 @@ describe('RackService', () => {
   describe('listRackTypes', () => {
     it('should GET /api/rack-types', () => {
       const mock: RackTemplate[] = [
-        { id: 1, name: '42U', height_u: 42, power_capacity_w: 10000, description: '', created_at: '', updated_at: '' },
+        { id: 1, name: '42U', height_u: 42, power_capacity_w: 10000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110, description: '', created_at: '', updated_at: '' },
       ];
       let result: RackTemplate[] | undefined;
       service.listRackTypes().subscribe(rts => { result = rts; });
@@ -36,7 +36,7 @@ describe('RackService', () => {
 
   describe('createRackType', () => {
     it('should POST /api/rack-types', () => {
-      const mock: RackTemplate = { id: 2, name: '24U', height_u: 24, power_capacity_w: 5000, description: '', created_at: '', updated_at: '' };
+      const mock: RackTemplate = { id: 2, name: '24U', height_u: 24, power_capacity_w: 5000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110, description: '', created_at: '', updated_at: '' };
       let result: RackTemplate | undefined;
       service.createRackType({ name: '24U', height_u: 24, power_capacity_w: 5000 }).subscribe(rt => { result = rt; });
       const req = httpMock.expectOne('/api/rack-types');
@@ -48,7 +48,7 @@ describe('RackService', () => {
 
   describe('updateRackType', () => {
     it('should PUT /api/rack-types/:id', () => {
-      const mock: RackTemplate = { id: 1, name: 'updated', height_u: 42, power_capacity_w: 10000, description: '', created_at: '', updated_at: '' };
+      const mock: RackTemplate = { id: 1, name: 'updated', height_u: 42, power_capacity_w: 10000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110, description: '', created_at: '', updated_at: '' };
       let result: RackTemplate | undefined;
       service.updateRackType(1, { name: 'updated', height_u: 42, power_capacity_w: 10000 }).subscribe(rt => { result = rt; });
       const req = httpMock.expectOne('/api/rack-types/1');
@@ -72,7 +72,7 @@ describe('RackService', () => {
   describe('listRacks', () => {
     it('should GET /api/racks', () => {
       const mock: Rack[] = [
-        { id: 1, name: 'rack-01', height_u: 42, power_capacity_w: 5000, block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '' },
+        { id: 1, name: 'rack-01', height_u: 42, power_capacity_w: 5000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110, block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '' },
       ];
       let result: Rack[] | undefined;
       service.listRacks().subscribe(racks => { result = racks; });
@@ -93,9 +93,9 @@ describe('RackService', () => {
   describe('getRack', () => {
     it('should GET /api/racks/:id with summary', () => {
       const mock: RackSummary = {
-        id: 1, name: 'rack-01', height_u: 42, power_capacity_w: 5000, block_id: null, rack_type_id: null,
-        description: '', created_at: '', updated_at: '',
-        used_u: 2, available_u: 40, used_watts: 500, devices: [],
+        id: 1, name: 'rack-01', height_u: 42, power_capacity_w: 5000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110,
+        block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '',
+        used_u: 2, available_u: 40, used_watts_idle: 300, used_watts_typical: 500, used_watts_max: 700, devices: [],
       };
       let result: RackSummary | undefined;
       service.getRack(1).subscribe(summary => { result = summary; });
@@ -109,7 +109,7 @@ describe('RackService', () => {
 
   describe('createRack', () => {
     it('should POST /api/racks', () => {
-      const mock: Rack = { id: 3, name: 'new-rack', height_u: 42, power_capacity_w: 0, block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '' };
+      const mock: Rack = { id: 3, name: 'new-rack', height_u: 42, power_capacity_w: 0, power_oversub_pct_warn: 100, power_oversub_pct_max: 110, block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '' };
       let result: Rack | undefined;
       service.createRack({ name: 'new-rack', height_u: 42 }).subscribe(r => { result = r; });
       const req = httpMock.expectOne('/api/racks');
@@ -121,7 +121,7 @@ describe('RackService', () => {
 
   describe('updateRack', () => {
     it('should PUT /api/racks/:id', () => {
-      const mock: Rack = { id: 1, name: 'updated-rack', height_u: 42, power_capacity_w: 5000, block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '' };
+      const mock: Rack = { id: 1, name: 'updated-rack', height_u: 42, power_capacity_w: 5000, power_oversub_pct_warn: 100, power_oversub_pct_max: 110, block_id: null, rack_type_id: null, description: '', created_at: '', updated_at: '' };
       let result: Rack | undefined;
       service.updateRack(1, { name: 'updated-rack' }).subscribe(r => { result = r; });
       const req = httpMock.expectOne('/api/racks/1');

@@ -305,12 +305,14 @@ func (s *BlockStore) ListPortConnectionsByRack(aggID, rackID int64) ([]*models.P
 // GetDeviceModel returns the DeviceModel with the given id (used for port_count lookups).
 func (s *BlockStore) GetDeviceModel(id int64) (*models.DeviceModel, error) {
 	const q = `
-		SELECT id, vendor, model, port_count, height_u, power_watts, description, created_at, updated_at
+		SELECT id, vendor, model, port_count, height_u,
+		       power_watts_typical, description, created_at, updated_at
 		FROM device_models WHERE id = ?`
 
 	dm := &models.DeviceModel{}
 	err := s.db.QueryRow(q, id).
-		Scan(&dm.ID, &dm.Vendor, &dm.Model, &dm.PortCount, &dm.HeightU, &dm.PowerWatts, &dm.Description, &dm.CreatedAt, &dm.UpdatedAt)
+		Scan(&dm.ID, &dm.Vendor, &dm.Model, &dm.PortCount, &dm.HeightU,
+			&dm.PowerWattsTypical, &dm.Description, &dm.CreatedAt, &dm.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}

@@ -149,15 +149,15 @@ func (s *FabricStore) Delete(id int64) error {
 // GetDeviceModelByID fetches a device model for validation.
 func (s *FabricStore) GetDeviceModelByID(id int64) (*models.DeviceModel, error) {
 	const q = `
-		SELECT id, vendor, model, port_count, height_u, power_watts, description,
-		       created_at, updated_at
+		SELECT id, vendor, model, port_count, height_u,
+		       power_watts_typical, description, created_at, updated_at
 		FROM device_models
 		WHERE id = ?`
 
 	dm := &models.DeviceModel{}
 	err := s.db.QueryRow(q, id).Scan(
-		&dm.ID, &dm.Vendor, &dm.Model, &dm.PortCount, &dm.HeightU, &dm.PowerWatts,
-		&dm.Description, &dm.CreatedAt, &dm.UpdatedAt)
+		&dm.ID, &dm.Vendor, &dm.Model, &dm.PortCount, &dm.HeightU,
+		&dm.PowerWattsTypical, &dm.Description, &dm.CreatedAt, &dm.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}
@@ -170,8 +170,8 @@ func (s *FabricStore) GetDeviceModelByID(id int64) (*models.DeviceModel, error) 
 // ListDeviceModels returns all device models.
 func (s *FabricStore) ListDeviceModels() ([]*models.DeviceModel, error) {
 	const q = `
-		SELECT id, vendor, model, port_count, height_u, power_watts, description,
-		       created_at, updated_at
+		SELECT id, vendor, model, port_count, height_u,
+		       power_watts_typical, description, created_at, updated_at
 		FROM device_models
 		ORDER BY vendor, model`
 
@@ -185,7 +185,7 @@ func (s *FabricStore) ListDeviceModels() ([]*models.DeviceModel, error) {
 	for rows.Next() {
 		dm := &models.DeviceModel{}
 		if err := rows.Scan(&dm.ID, &dm.Vendor, &dm.Model, &dm.PortCount, &dm.HeightU,
-			&dm.PowerWatts, &dm.Description, &dm.CreatedAt, &dm.UpdatedAt); err != nil {
+			&dm.PowerWattsTypical, &dm.Description, &dm.CreatedAt, &dm.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan device model: %w", err)
 		}
 		out = append(out, dm)
