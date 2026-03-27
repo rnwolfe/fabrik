@@ -68,16 +68,14 @@ test.describe('Knowledge Base', () => {
     expect(bodyText?.length).toBeGreaterThan(50);
   });
 
-  test('help button opens slide-out panel', async ({ page }) => {
-    // Navigate to a page that has a help button (inject one via URL param for testing)
-    // This test verifies the help panel infrastructure works end-to-end.
-    // We programmatically trigger the panel by navigating to the knowledge route
-    // since the full app shell with HelpButton is tested via unit tests.
+  test('renders knowledge panel container in DOM', async ({ page }) => {
+    // Verifies the knowledge panel element is present in the DOM.
+    // The panel starts in a closed (hidden) state; opening behaviour is
+    // covered by unit tests for KnowledgePanelComponent.
     await expect(page.locator('.toc-sidenav')).toBeVisible();
 
-    // Verify the panel starts hidden
+    // Panel element should be in the DOM (closed state, not visible to user)
     const panel = page.locator('.knowledge-panel');
-    // Panel is in DOM but should be in 'closed' state
-    expect(panel).toBeDefined();
+    await expect(panel).toBeAttached();
   });
 });

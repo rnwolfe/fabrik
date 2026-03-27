@@ -1,5 +1,6 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import DOMPurify from 'dompurify';
 
 /**
  * MarkdownRendererService converts Markdown (with Mermaid, KaTeX, and
@@ -10,16 +11,19 @@ import { isPlatformBrowser } from '@angular/common';
  *   - highlight.js — syntax highlighting for fenced code blocks
  *   - mermaid — diagram rendering (post-process DOM)
  *   - katex   — math rendering (inline $...$ and block $$...$$)
+ *   - dompurify — HTML sanitization before the output leaves this service
  */
 @Injectable({ providedIn: 'root' })
 export class MarkdownRendererService {
   private readonly platformId = inject(PLATFORM_ID);
+  private _mermaidCounter = 0;
 
   /**
    * Converts Markdown to HTML.
    * Code blocks with language "mermaid" are wrapped in a div for later
    * post-processing by renderMermaid().
-   * Math expressions ($...$ and $$...$$) are rendered with KaTeX.
+   * Math expressions ($...$ and $$...$$ ) are rendered with KaTeX.
+   * The final HTML is sanitized with DOMPurify before being returned.
    */
   async render(markdown: string): Promise<string> {
     if (!isPlatformBrowser(this.platformId)) {
@@ -37,12 +41,14 @@ export class MarkdownRendererService {
     // Override code rendering: mermaid blocks get special treatment.
     renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
       if (lang === 'mermaid') {
-        return `<div class="mermaid-diagram">${this.escapeMermaid(text)}</div>`;
+        // Escape the Mermaid source when inserting into a wrapper element
+        // to prevent XSS via crafted diagram definitions.
+        return `<div class="mermaid-diagram">${this.escapeHtml(text)}</div>`;
       }
       if (lang && hljs.getLanguage(lang)) {
         try {
           const highlighted = hljs.highlight(text, { language: lang }).value;
-          return `<pre><code class="hljs language-${lang}">${highlighted}</code></pre>`;
+          return `<pre><code class="hljs language-${this.escapeAttr(lang)}">${highlighted}</code></pre>`;
         } catch {
           // fall through to default
         }
@@ -51,26 +57,40 @@ export class MarkdownRendererService {
     };
 
     // Override links to flag internal knowledge links for resolution.
+    // Attribute values are HTML-escaped to prevent XSS.
     renderer.link = ({ href, title, text }: { href: string; title?: string | null; text: string }) => {
+      const safeHref = this.escapeAttr(href ?? '');
       if (href && !href.startsWith('http') && !href.startsWith('#')) {
         // Internal link — mark with data attribute for Angular router
-        const t = title ? ` title="${title}"` : '';
-        return `<a href="${href}"${t} data-knowledge-link="true">${text}</a>`;
+        const t = title ? ` title="${this.escapeAttr(title)}"` : '';
+        return `<a href="${safeHref}"${t} data-knowledge-link="true">${text}</a>`;
       }
-      const t = title ? ` title="${title}"` : '';
-      return `<a href="${href}"${t} target="_blank" rel="noopener noreferrer">${text}</a>`;
+      const t = title ? ` title="${this.escapeAttr(title)}"` : '';
+      return `<a href="${safeHref}"${t} target="_blank" rel="noopener noreferrer">${text}</a>`;
     };
 
     marked.use({ renderer });
 
     let html = await marked(processedMd);
     html = this.postProcessMath(html);
+
+    // Final DOMPurify pass — catches anything that slipped through the renderers.
+    // ADD_ATTR: allow target so external links keep target="_blank" as set by
+    // the renderer. rel="noopener noreferrer" is always present to mitigate
+    // tab-napping even when target is allowed.
+    html = DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true },
+      ADD_ATTR: ['target', 'data-knowledge-link'],
+    });
+
     return html;
   }
 
   /**
    * Initialises Mermaid and renders all .mermaid-diagram elements in the
    * given container. Call this after the rendered HTML is inserted into the DOM.
+   * Mermaid reads graphDef from textContent (not innerHTML) so the escaped
+   * source is decoded automatically by the browser before Mermaid sees it.
    */
   async renderMermaid(container: HTMLElement): Promise<void> {
     if (!isPlatformBrowser(this.platformId)) {
@@ -86,10 +106,11 @@ export class MarkdownRendererService {
       const mermaid = (await import('mermaid')).default;
       mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
-      let idx = 0;
       for (const el of Array.from(elements)) {
+        // textContent decodes the HTML entities we inserted, giving Mermaid
+        // the original diagram definition string.
         const graphDef = el.textContent || '';
-        const id = `mermaid-${Date.now()}-${idx++}`;
+        const id = `mermaid-${++this._mermaidCounter}`;
         try {
           const { svg } = await mermaid.render(id, graphDef);
           el.innerHTML = svg;
@@ -162,17 +183,23 @@ export class MarkdownRendererService {
     (window as Window & { __fabrik_katex?: unknown }).__fabrik_katex = katex;
   }
 
-  private escapeMermaid(text: string): string {
-    // Mermaid reads text content, not innerHTML — just return as-is
-    return text;
-  }
-
+  /** Escapes a string for safe insertion as HTML text content. */
   private escapeHtml(text: string): string {
     return text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /** Escapes a string for safe use as an HTML attribute value (inside double quotes). */
+  private escapeAttr(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/'/g, '&#x27;');
   }
 
   private unescapeHtml(text: string): string {
