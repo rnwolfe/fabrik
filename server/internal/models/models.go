@@ -44,24 +44,53 @@ type Block struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// RackType enumerates whether a rack is physical hardware or a logical grouping.
-type RackType string
+// RackTemplate represents a named rack type template that defines hardware specifications.
+type RackTemplate struct {
+	ID             int64     `json:"id"`
+	Name           string    `json:"name"`
+	HeightU        int       `json:"height_u"`
+	PowerCapacityW int       `json:"power_capacity_w"`
+	Description    string    `json:"description"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
 
-const (
-	RackTypePhysical RackType = "physical"
-	RackTypeLogical  RackType = "logical"
-)
-
-// Rack represents a physical or logical rack within a block.
+// Rack represents a physical rack within a block (or standalone).
 type Rack struct {
-	ID          int64     `json:"id"`
-	BlockID     int64     `json:"block_id"`
-	Name        string    `json:"name"`
-	Type        RackType  `json:"type"`
-	HeightU     int       `json:"height_u"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID             int64     `json:"id"`
+	BlockID        *int64    `json:"block_id"`
+	RackTypeID     *int64    `json:"rack_type_id"`
+	Name           string    `json:"name"`
+	HeightU        int       `json:"height_u"`
+	PowerCapacityW int       `json:"power_capacity_w"`
+	Description    string    `json:"description"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// RackSummary is a rack with computed usage metrics and device list.
+type RackSummary struct {
+	Rack
+	UsedU       int             `json:"used_u"`
+	AvailableU  int             `json:"available_u"`
+	UsedWatts   int             `json:"used_watts"`
+	Devices     []*DeviceSummary `json:"devices"`
+	Warning     string          `json:"warning,omitempty"`
+}
+
+// DeviceSummary is a device with its model information included.
+type DeviceSummary struct {
+	Device
+	ModelVendor string `json:"model_vendor"`
+	ModelName   string `json:"model_name"`
+	HeightU     int    `json:"height_u"`
+	PowerWatts  int    `json:"power_watts"`
+}
+
+// PlaceDeviceResult is returned when placing or moving a device.
+type PlaceDeviceResult struct {
+	Device  *Device `json:"device"`
+	Warning string  `json:"warning,omitempty"`
 }
 
 // DeviceRole enumerates the role of a device within the network fabric.

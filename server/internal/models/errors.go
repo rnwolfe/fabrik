@@ -16,4 +16,13 @@ var (
 
 	// ErrSeedReadOnly is returned when a mutation is attempted on a seed device model.
 	ErrSeedReadOnly = errors.New("seed device models are read-only")
+
+	// ErrRUOverflow is returned when a device placement would exceed rack RU capacity (hard limit).
+	ErrRUOverflow = errors.New("RU overflow")
+
+	// ErrPositionOverlap is returned when a device placement would overlap an existing device.
+	ErrPositionOverlap = errors.New("position overlap")
+
+	// ErrConflict is returned when deleting a resource that is referenced by others.
+	ErrConflict = errors.New("conflict")
 )
