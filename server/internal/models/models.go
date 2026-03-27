@@ -97,11 +97,13 @@ type PlaceDeviceResult struct {
 type DeviceRole string
 
 const (
-	DeviceRoleSpine     DeviceRole = "spine"
-	DeviceRoleLeaf      DeviceRole = "leaf"
-	DeviceRoleSuperSpine DeviceRole = "super_spine"
-	DeviceRoleServer    DeviceRole = "server"
-	DeviceRoleOther     DeviceRole = "other"
+	DeviceRoleSpine         DeviceRole = "spine"
+	DeviceRoleLeaf          DeviceRole = "leaf"
+	DeviceRoleSuperSpine    DeviceRole = "super_spine"
+	DeviceRoleServer        DeviceRole = "server"
+	DeviceRoleOther         DeviceRole = "other"
+	DeviceRoleManagementToR DeviceRole = "management_tor"
+	DeviceRoleManagementAgg DeviceRole = "management_agg"
 )
 
 // Device represents a physical network device installed in a rack.
@@ -154,13 +156,17 @@ type DeviceModel struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-
-// NetworkPlane enumerates the network plane for block aggregation assignments.
+// NetworkPlane distinguishes the front-end fabric from the management plane.
 type NetworkPlane string
 
 const (
-	NetworkPlaneFrontEnd    NetworkPlane = "frontend"
-	NetworkPlaneManagement  NetworkPlane = "management"
+	// PlaneFrontEnd / NetworkPlaneFrontEnd: the front-end (leaf/spine) fabric plane.
+	PlaneFrontEnd       NetworkPlane = "front_end"
+	NetworkPlaneFrontEnd NetworkPlane = "front_end"
+
+	// PlaneManagement / NetworkPlaneManagement: the management network plane.
+	PlaneManagement       NetworkPlane = "management"
+	NetworkPlaneManagement NetworkPlane = "management"
 )
 
 // BlockAggregation represents an aggregation switch model assigned to a block for a given plane.

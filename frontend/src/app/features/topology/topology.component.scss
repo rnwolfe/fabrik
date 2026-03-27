@@ -202,3 +202,101 @@
 }
 
 .btn-spinner { display: inline-flex; margin-right: 0.5rem; }
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.mgmt-plane-toggle {
+  .toggle-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// Management plane panel
+.management-plane-panel {
+  margin-bottom: 1.5rem;
+}
+
+.mgmt-plane-card {
+  border-left: 4px solid var(--mat-sys-tertiary);
+
+  .mgmt-plane-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    .mgmt-icon {
+      color: var(--mat-sys-tertiary);
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+  }
+}
+
+.mgmt-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  .mgmt-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// Management node color: distinct from front-end fabric (tertiary / teal)
+.mgmt-node-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mgmt-node-tor {
+  background: var(--mat-sys-tertiary);
+}
+
+.mgmt-node-agg {
+  background: color-mix(in srgb, var(--mat-sys-tertiary) 60%, #000);
+}
+
+// Management link: dashed line in tertiary color
+.mgmt-link-line {
+  display: inline-block;
+  width: 28px;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--mat-sys-tertiary) 0,
+    var(--mat-sys-tertiary) 6px,
+    transparent 6px,
+    transparent 10px
+  );
+  flex-shrink: 0;
+}
+
+.mgmt-info {
+  font-size: 0.875rem;
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0;
+  line-height: 1.5;
+
+  code {
+    background: color-mix(in srgb, var(--mat-sys-surface-variant) 60%, transparent);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    font-size: 0.85em;
+  }
+}

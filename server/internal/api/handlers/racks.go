@@ -346,6 +346,10 @@ func (h *RackHandler) PlaceDevice(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if errors.Is(err, models.ErrConflict) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
 		slog.Error("place device", "err", err, "rackID", rackID)
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return

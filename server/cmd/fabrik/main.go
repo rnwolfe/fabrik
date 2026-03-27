@@ -16,7 +16,6 @@ import (
 	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
-//go:embed all:docs/knowledge
 var docsFS embed.FS
 
 func main() {
@@ -35,7 +34,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Wire up layers: store → service → handler
 	designStore := store.NewDesignStore(db)
 	designSvc := service.NewDesignService(designStore)
 	designHandler := handlers.NewDesignHandler(designSvc)
@@ -44,22 +42,24 @@ func main() {
 	deviceModelSvc := service.NewDeviceModelService(deviceModelStore)
 	deviceModelHandler := handlers.NewDeviceModelHandler(deviceModelSvc)
 
-	// Wire up rack types and racks
+	// Wire up blocks and block aggregation (blockStore satisfies both BlockRepository and ManagementAggRepository).
+	blockStore := store.NewBlockStore(db)
+	managementSvc := service.NewManagementService(blockStore)
+	managementHandler := handlers.NewManagementHandler(managementSvc)
+
+	// Wire up rack types and racks; inject management allocator for management_tor placement
 	rackTypeStore := store.NewRackTypeStore(db)
 	rackStore := store.NewRackStore(db)
-	rackSvc := service.NewRackService(rackTypeStore, rackStore)
+	rackSvc := service.NewRackService(rackTypeStore, rackStore).WithManagementAllocator(managementSvc)
 	rackHandler := handlers.NewRackHandler(rackSvc)
 
 	fabricStore := store.NewFabricStore(db)
 	fabricSvc := service.NewFabricService(fabricStore)
 	fabricHandler := handlers.NewFabricHandler(fabricSvc)
 
-	// Wire up blocks and block aggregation
-	blockStore := store.NewBlockStore(db)
 	blockSvc := service.NewBlockService(blockStore)
 	blockHandler := handlers.NewBlockHandler(blockSvc)
 
-	// Wire up knowledge base
 	knowledgeSub, err := fs.Sub(docsFS, "docs/knowledge")
 	if err != nil {
 		slog.Error("failed to sub knowledge FS", "err", err)
@@ -70,14 +70,12 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// Health check
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok"}`)
 	})
 
-	// Register domain routes
-	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler)
+	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler, managementHandler)
 
 	addr := ":8080"
 	if port := os.Getenv("FABRIK_PORT"); port != "" {

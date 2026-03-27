@@ -17,12 +17,12 @@ const mockBlock: Block = {
 const mockSummary: BlockAggregationSummary = {
   id: 1,
   block_id: 1,
-  plane: 'frontend',
+  plane: 'front_end',
   device_model_id: 5,
   total_ports: 32,
   allocated_ports: 2,
   available_ports: 30,
-  utilization: '2/32 ports allocated on frontend agg',
+  utilization: '2/32 ports allocated on front_end agg',
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
@@ -78,8 +78,8 @@ describe('BlockService', () => {
   describe('assignAggregation', () => {
     it('should PUT /api/blocks/:id/aggregations/:plane', () => {
       let result: BlockAggregationSummary | undefined;
-      service.assignAggregation(1, 'frontend', { device_model_id: 5 }).subscribe(s => { result = s; });
-      const req = httpMock.expectOne('/api/blocks/1/aggregations/frontend');
+      service.assignAggregation(1, 'front_end', { device_model_id: 5 }).subscribe(s => { result = s; });
+      const req = httpMock.expectOne('/api/blocks/1/aggregations/front_end');
       expect(req.request.method).toBe('PUT');
       expect(req.request.body).toEqual({ device_model_id: 5 });
       req.flush(mockSummary);
@@ -91,11 +91,11 @@ describe('BlockService', () => {
   describe('getAggregation', () => {
     it('should GET /api/blocks/:id/aggregations/:plane', () => {
       let result: BlockAggregationSummary | undefined;
-      service.getAggregation(1, 'frontend').subscribe(s => { result = s; });
-      const req = httpMock.expectOne('/api/blocks/1/aggregations/frontend');
+      service.getAggregation(1, 'front_end').subscribe(s => { result = s; });
+      const req = httpMock.expectOne('/api/blocks/1/aggregations/front_end');
       expect(req.request.method).toBe('GET');
       req.flush(mockSummary);
-      expect(result?.utilization).toBe('2/32 ports allocated on frontend agg');
+      expect(result?.utilization).toBe('2/32 ports allocated on front_end agg');
     });
   });
 
@@ -113,8 +113,8 @@ describe('BlockService', () => {
   describe('deleteAggregation', () => {
     it('should DELETE /api/blocks/:id/aggregations/:plane', () => {
       let called = false;
-      service.deleteAggregation(1, 'frontend').subscribe(() => { called = true; });
-      const req = httpMock.expectOne('/api/blocks/1/aggregations/frontend');
+      service.deleteAggregation(1, 'front_end').subscribe(() => { called = true; });
+      const req = httpMock.expectOne('/api/blocks/1/aggregations/front_end');
       expect(req.request.method).toBe('DELETE');
       req.flush(null, { status: 204, statusText: 'No Content' });
       expect(called).toBe(true);
@@ -127,8 +127,8 @@ describe('BlockService', () => {
         { id: 1, block_aggregation_id: 1, rack_id: 2, agg_port_index: 0, leaf_device_name: 'leaf-1', created_at: '' },
       ];
       let result: PortConnection[] | undefined;
-      service.listPortConnections(1, 'frontend').subscribe(cs => { result = cs; });
-      const req = httpMock.expectOne('/api/blocks/1/aggregations/frontend/connections');
+      service.listPortConnections(1, 'front_end').subscribe(cs => { result = cs; });
+      const req = httpMock.expectOne('/api/blocks/1/aggregations/front_end/connections');
       expect(req.request.method).toBe('GET');
       req.flush(mockConns);
       expect(result?.length).toBe(1);
@@ -184,12 +184,12 @@ describe('BlockService', () => {
         ...mockSummary,
         allocated_ports: 32,
         available_ports: 0,
-        utilization: '32/32 ports allocated on frontend agg',
-        warning: '32/32 ports allocated on frontend agg; no capacity for additional racks',
+        utilization: '32/32 ports allocated on front_end agg',
+        warning: '32/32 ports allocated on front_end agg; no capacity for additional racks',
       };
       let result: BlockAggregationSummary | undefined;
-      service.getAggregation(1, 'frontend').subscribe(s => { result = s; });
-      const req = httpMock.expectOne('/api/blocks/1/aggregations/frontend');
+      service.getAggregation(1, 'front_end').subscribe(s => { result = s; });
+      const req = httpMock.expectOne('/api/blocks/1/aggregations/front_end');
       req.flush(fullSummary);
       expect(result?.available_ports).toBe(0);
       expect(result?.warning).toBeTruthy();
@@ -200,12 +200,12 @@ describe('BlockService', () => {
         ...mockSummary,
         allocated_ports: 0,
         available_ports: 32,
-        utilization: '0/32 ports allocated on frontend agg',
+        utilization: '0/32 ports allocated on front_end agg',
         warning: undefined,
       };
       let result: BlockAggregationSummary | undefined;
-      service.getAggregation(1, 'frontend').subscribe(s => { result = s; });
-      const req = httpMock.expectOne('/api/blocks/1/aggregations/frontend');
+      service.getAggregation(1, 'front_end').subscribe(s => { result = s; });
+      const req = httpMock.expectOne('/api/blocks/1/aggregations/front_end');
       req.flush(emptySummary);
       expect(result?.available_ports).toBe(32);
       expect(result?.warning).toBeFalsy();

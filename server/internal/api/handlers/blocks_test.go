@@ -275,9 +275,9 @@ func TestBlockHandler_AssignAggregation(t *testing.T) {
 
 	t.Run("valid assignment", func(t *testing.T) {
 		body := map[string]any{"device_model_id": 10}
-		r := blockRequest(t, "PUT", "/api/blocks/1/aggregations/frontend", body)
+		r := blockRequest(t, "PUT", "/api/blocks/1/aggregations/front_end", body)
 		r.SetPathValue("id", "1")
-		r.SetPathValue("plane", "frontend")
+		r.SetPathValue("plane", "front_end")
 		w := blockResponse(t, http.HandlerFunc(h.AssignAggregation), r)
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -297,9 +297,9 @@ func TestBlockHandler_AssignAggregation(t *testing.T) {
 
 	t.Run("downsize rejected", func(t *testing.T) {
 		body := map[string]any{"device_model_id": 999} // triggers ErrAggModelDownsize in fake
-		r := blockRequest(t, "PUT", "/api/blocks/1/aggregations/frontend", body)
+		r := blockRequest(t, "PUT", "/api/blocks/1/aggregations/front_end", body)
 		r.SetPathValue("id", "1")
-		r.SetPathValue("plane", "frontend")
+		r.SetPathValue("plane", "front_end")
 		w := blockResponse(t, http.HandlerFunc(h.AssignAggregation), r)
 		if w.Code != http.StatusUnprocessableEntity {
 			t.Errorf("expected 422, got %d: %s", w.Code, w.Body.String())
@@ -308,9 +308,9 @@ func TestBlockHandler_AssignAggregation(t *testing.T) {
 
 	t.Run("block not found", func(t *testing.T) {
 		body := map[string]any{"device_model_id": 10}
-		r := blockRequest(t, "PUT", "/api/blocks/9999/aggregations/frontend", body)
+		r := blockRequest(t, "PUT", "/api/blocks/9999/aggregations/front_end", body)
 		r.SetPathValue("id", "9999")
-		r.SetPathValue("plane", "frontend")
+		r.SetPathValue("plane", "front_end")
 		w := blockResponse(t, http.HandlerFunc(h.AssignAggregation), r)
 		if w.Code != http.StatusNotFound {
 			t.Errorf("expected 404, got %d", w.Code)
@@ -325,9 +325,9 @@ func TestBlockHandler_GetAggregation(t *testing.T) {
 	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10)
 
 	t.Run("found", func(t *testing.T) {
-		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/frontend", nil)
+		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/front_end", nil)
 		r.SetPathValue("id", "1")
-		r.SetPathValue("plane", "frontend")
+		r.SetPathValue("plane", "front_end")
 		w := blockResponse(t, http.HandlerFunc(h.GetAggregation), r)
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
@@ -352,9 +352,9 @@ func TestBlockHandler_DeleteAggregation(t *testing.T) {
 	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10)
 
 	t.Run("deletes successfully", func(t *testing.T) {
-		r := httptest.NewRequest("DELETE", "/api/blocks/1/aggregations/frontend", nil)
+		r := httptest.NewRequest("DELETE", "/api/blocks/1/aggregations/front_end", nil)
 		r.SetPathValue("id", "1")
-		r.SetPathValue("plane", "frontend")
+		r.SetPathValue("plane", "front_end")
 		w := blockResponse(t, http.HandlerFunc(h.DeleteAggregation), r)
 		if w.Code != http.StatusNoContent {
 			t.Errorf("expected 204, got %d", w.Code)
@@ -444,9 +444,9 @@ func TestBlockHandler_ListPortConnections(t *testing.T) {
 	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10)
 
 	t.Run("returns empty list", func(t *testing.T) {
-		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/frontend/connections", nil)
+		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/front_end/connections", nil)
 		r.SetPathValue("id", "1")
-		r.SetPathValue("plane", "frontend")
+		r.SetPathValue("plane", "front_end")
 		w := blockResponse(t, http.HandlerFunc(h.ListPortConnections), r)
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)

@@ -35,15 +35,29 @@ type RackRepository interface {
 	GetDeviceModel(id int64) (*models.DeviceModel, error)
 }
 
+// ManagementPortAllocator is the interface for management port allocation,
+// used by RackService to enforce management agg port capacity when placing management_tor devices.
+type ManagementPortAllocator interface {
+	AllocateManagementPort(blockID int64) (*models.BlockAggregation, string, error)
+}
+
 // RackService implements business logic for rack types, racks, and device placement.
 type RackService struct {
-	typeRepo RackTypeRepository
-	rackRepo RackRepository
+	typeRepo   RackTypeRepository
+	rackRepo   RackRepository
+	mgmtAlloc  ManagementPortAllocator
 }
 
 // NewRackService returns a new RackService.
 func NewRackService(typeRepo RackTypeRepository, rackRepo RackRepository) *RackService {
 	return &RackService{typeRepo: typeRepo, rackRepo: rackRepo}
+}
+
+// WithManagementAllocator attaches a management port allocator to the RackService.
+// When set, placing a management_tor device will enforce management agg port capacity.
+func (s *RackService) WithManagementAllocator(alloc ManagementPortAllocator) *RackService {
+	s.mgmtAlloc = alloc
+	return s
 }
 
 // --- Rack Type operations ---
@@ -287,16 +301,36 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 		usedWatts += d.PowerWatts
 	}
 
-	// Hard reject: device doesn't fit at all.
-	if dm.HeightU > rack.HeightU-usedU {
+	// For management switches: RU/power overflow is a soft warning, not a hard block.
+	isManagementRole := models.DeviceRole(role) == models.DeviceRoleManagementToR ||
+		models.DeviceRole(role) == models.DeviceRoleManagementAgg
+
+	// Hard reject: device doesn't fit at all (soft for management).
+	if dm.HeightU > rack.HeightU-usedU && !isManagementRole {
 		return nil, fmt.Errorf("%w: device needs %dU but only %dU available", models.ErrRUOverflow, dm.HeightU, rack.HeightU-usedU)
 	}
+
+	// Validate the device role before placement.
+	if role == "" {
+		role = string(models.DeviceRoleOther)
+	}
+	if err := ValidateDeviceRole(role); err != nil {
+		return nil, err
+	}
+
+	var ruWarning string
 
 	// Auto-suggest position if not specified.
 	if position == 0 {
 		position = suggestPosition(rack.HeightU, existing, dm.HeightU)
 		if position == 0 {
-			return nil, fmt.Errorf("%w: no contiguous %dU slot available", models.ErrRUOverflow, dm.HeightU)
+			if isManagementRole {
+				// Management devices: no free slot is a soft warning; place at position 1.
+				position = 1
+				ruWarning = fmt.Sprintf("management switch placement: no contiguous %dU slot available in rack", dm.HeightU)
+			} else {
+				return nil, fmt.Errorf("%w: no contiguous %dU slot available", models.ErrRUOverflow, dm.HeightU)
+			}
 		}
 	}
 
@@ -305,16 +339,46 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 		return nil, fmt.Errorf("%w: position must be >= 1", models.ErrConstraintViolation)
 	}
 	if position+dm.HeightU-1 > rack.HeightU {
-		return nil, fmt.Errorf("%w: device at position %d with height %dU exceeds rack height %dU", models.ErrRUOverflow, position, dm.HeightU, rack.HeightU)
+		if isManagementRole {
+			ruWarning = fmt.Sprintf("management switch placement: device at position %d with height %dU exceeds rack height %dU",
+				position, dm.HeightU, rack.HeightU)
+			// Place at last valid position.
+			position = rack.HeightU - dm.HeightU + 1
+			if position < 1 {
+				position = 1
+			}
+		} else {
+			return nil, fmt.Errorf("%w: device at position %d with height %dU exceeds rack height %dU", models.ErrRUOverflow, position, dm.HeightU, rack.HeightU)
+		}
 	}
 
-	// Validate no overlap.
+	// Validate no overlap (management devices also cannot overlap).
 	if err := checkOverlap(existing, position, dm.HeightU, 0); err != nil {
-		return nil, err
+		if isManagementRole {
+			if ruWarning == "" {
+				ruWarning = fmt.Sprintf("management switch placement: %s", err.Error())
+			}
+			// Find first open slot, ignoring capacity.
+			pos := suggestPosition(rack.HeightU, existing, dm.HeightU)
+			if pos == 0 {
+				pos = 1
+			}
+			position = pos
+		} else {
+			return nil, err
+		}
 	}
 
-	if role == "" {
-		role = string(models.DeviceRoleOther)
+	// For management_tor devices: enforce management agg port capacity before placement.
+	// This check must happen before the device is written to the database.
+	var mgmtPortWarning string
+	if models.DeviceRole(role) == models.DeviceRoleManagementToR && s.mgmtAlloc != nil && rack.BlockID != nil {
+		_, warning, err := s.mgmtAlloc.AllocateManagementPort(*rack.BlockID)
+		if err != nil {
+			// Hard block: management agg is full.
+			return nil, fmt.Errorf("%w: management agg port capacity exceeded for block %d", models.ErrConflict, *rack.BlockID)
+		}
+		mgmtPortWarning = warning
 	}
 
 	d, err := s.rackRepo.PlaceDevice(&models.Device{
@@ -331,19 +395,42 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 
 	result := &models.PlaceDeviceResult{Device: d}
 
+	// Append management port warning if present.
+	if mgmtPortWarning != "" {
+		if ruWarning != "" {
+			ruWarning = ruWarning + "; " + mgmtPortWarning
+		} else {
+			ruWarning = mgmtPortWarning
+		}
+	}
+
 	// Soft warning: power capacity exceeded or approaching threshold.
 	if rack.PowerCapacityW > 0 {
 		newTotal := usedWatts + dm.PowerWatts
 		if newTotal > rack.PowerCapacityW {
-			result.Warning = fmt.Sprintf("power capacity exceeded: %dW used + %dW new = %dW > %dW capacity",
+			pwrMsg := fmt.Sprintf("power capacity exceeded: %dW used + %dW new = %dW > %dW capacity",
 				usedWatts, dm.PowerWatts, newTotal, rack.PowerCapacityW)
+			if ruWarning != "" {
+				result.Warning = ruWarning + "; " + pwrMsg
+			} else {
+				result.Warning = pwrMsg
+			}
 		} else if float64(newTotal)/float64(rack.PowerCapacityW) > powerWarningThreshold {
-			result.Warning = fmt.Sprintf("power utilization at %.0f%% (%dW / %dW)",
+			pwrMsg := fmt.Sprintf("power utilization at %.0f%% (%dW / %dW)",
 				float64(newTotal)/float64(rack.PowerCapacityW)*100, newTotal, rack.PowerCapacityW)
+			if ruWarning != "" {
+				result.Warning = ruWarning + "; " + pwrMsg
+			} else {
+				result.Warning = pwrMsg
+			}
+		} else if ruWarning != "" {
+			result.Warning = ruWarning
 		}
+	} else if ruWarning != "" {
+		result.Warning = ruWarning
 	}
 
-	slog.Info("device placed", "rackID", rackID, "deviceID", d.ID, "position", position)
+	slog.Info("device placed", "rackID", rackID, "deviceID", d.ID, "position", position, "role", role)
 	return result, nil
 }
 

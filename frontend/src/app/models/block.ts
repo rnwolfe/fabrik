@@ -10,3 +10,4 @@ export interface Block {
   created_at: string;
   updated_at: string;
 }
+
