@@ -85,7 +85,7 @@
         @if (node.utilization !== undefined) {
           <div
             class="util-bar-container"
-            role="meter"
+            role="progressbar"
             [attr.aria-valuenow]="utilPct(node.utilization)"
             aria-valuemin="0"
             aria-valuemax="100"

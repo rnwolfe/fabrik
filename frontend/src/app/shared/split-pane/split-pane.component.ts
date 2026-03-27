@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   ElementRef,
   Input,
@@ -30,6 +31,7 @@ const SESSION_KEY_PREFIX = 'fabrik-split-pane-';
   imports: [CommonModule],
   templateUrl: './split-pane.component.html',
   styleUrl: './split-pane.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SplitPaneComponent implements AfterViewInit, OnDestroy {
   @ViewChild('container') containerRef!: ElementRef<HTMLDivElement>;

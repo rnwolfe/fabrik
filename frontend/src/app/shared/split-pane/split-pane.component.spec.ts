@@ -96,4 +96,52 @@ describe('SplitPaneComponent', () => {
     expect(el.querySelector('.split-left')).toBeTruthy();
     expect(el.querySelector('.split-right')).toBeTruthy();
   });
+
+  describe('session storage persistence', () => {
+    afterEach(() => {
+      sessionStorage.clear();
+    });
+
+    it('saves leftPct to sessionStorage on mouseup', () => {
+      component.storageKey = 'test-pane';
+      component.leftPct.set(65);
+      component['_saveToSession'](65);
+      expect(sessionStorage.getItem('fabrik-split-pane-test-pane')).toBe('65');
+    });
+
+    it('loads leftPct from sessionStorage on init', () => {
+      component.storageKey = 'test-pane';
+      component.minLeftPct = 20;
+      component.maxLeftPct = 80;
+      sessionStorage.setItem('fabrik-split-pane-test-pane', '70');
+      const loaded = component['_loadFromSession']();
+      expect(loaded).toBe(70);
+    });
+
+    it('returns null from sessionStorage when key is missing', () => {
+      component.storageKey = 'nonexistent-key';
+      const loaded = component['_loadFromSession']();
+      expect(loaded).toBeNull();
+    });
+
+    it('clamps loaded value to min/max bounds', () => {
+      component.storageKey = 'test-pane';
+      component.minLeftPct = 20;
+      component.maxLeftPct = 80;
+      sessionStorage.setItem('fabrik-split-pane-test-pane', '95');
+      const loaded = component['_loadFromSession']();
+      expect(loaded).toBe(80);
+
+      sessionStorage.setItem('fabrik-split-pane-test-pane', '5');
+      const loaded2 = component['_loadFromSession']();
+      expect(loaded2).toBe(20);
+    });
+
+    it('returns null when sessionStorage contains non-numeric value', () => {
+      component.storageKey = 'test-pane';
+      sessionStorage.setItem('fabrik-split-pane-test-pane', 'not-a-number');
+      const loaded = component['_loadFromSession']();
+      expect(loaded).toBeNull();
+    });
+  });
 });
