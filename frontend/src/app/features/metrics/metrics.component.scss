@@ -1,0 +1,300 @@
+.metrics-page {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.metrics-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.metrics-title {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+}
+
+.design-selector {
+  min-width: 240px;
+}
+
+// Loading
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 3rem 0;
+}
+
+// Error
+.error-message {
+  color: var(--mat-sys-error, #b00020);
+  text-align: center;
+  padding: 1rem;
+}
+
+// Empty states
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  gap: 0.5rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+
+  h2 {
+    margin: 0.5rem 0 0;
+    font-size: 1.25rem;
+    font-weight: 500;
+  }
+
+  p {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+}
+
+.empty-icon {
+  font-size: 3rem;
+  width: 3rem;
+  height: 3rem;
+  opacity: 0.5;
+}
+
+// Main grid layout
+.metrics-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+// Summary cards row
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.summary-card {
+  mat-card-content {
+    padding-bottom: 1rem !important;
+  }
+}
+
+.summary-card-body {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.summary-icon {
+  font-size: 2rem;
+  width: 2rem;
+  height: 2rem;
+  color: var(--mat-sys-primary, #6750a4);
+  opacity: 0.8;
+}
+
+.summary-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.summary-label {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  margin-top: 0.2rem;
+}
+
+// Choke point card
+.choke-card {
+  border-left: 4px solid var(--mat-sys-error, #b00020);
+}
+
+.choke-icon {
+  color: var(--mat-sys-error, #b00020);
+}
+
+.choke-body {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 0.5rem;
+}
+
+.choke-fabric {
+  font-weight: 600;
+}
+
+.choke-tier {
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  font-size: 0.9rem;
+}
+
+// Oversubscription color classes
+.metric-good {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.metric-warn {
+  color: #e65100;
+  font-weight: 600;
+}
+
+.metric-bad {
+  color: var(--mat-sys-error, #b00020);
+  font-weight: 700;
+}
+
+.metric-bad-chip {
+  background-color: var(--mat-sys-error-container, #ffdad6) !important;
+  color: var(--mat-sys-on-error-container, #410002) !important;
+  font-weight: 700;
+}
+
+.not-applicable {
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  opacity: 0.6;
+}
+
+// Tables
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+
+  th, td {
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--mat-sys-outline-variant, #cac4d0);
+  }
+
+  th {
+    font-weight: 600;
+    background-color: var(--mat-sys-surface-variant, #e7e0ec);
+    color: var(--mat-sys-on-surface-variant, #49454f);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover td {
+    background-color: var(--mat-sys-surface-container-low, #f7f2fa);
+  }
+}
+
+// Power section
+.power-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.power-stat {
+  text-align: center;
+}
+
+.power-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.power-label {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  margin-top: 0.2rem;
+}
+
+.power-bar-label {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  margin-bottom: 0.35rem;
+}
+
+// Resource capacity
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.resource-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background-color: var(--mat-sys-surface-container-low, #f7f2fa);
+}
+
+.resource-icon {
+  font-size: 1.5rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--mat-sys-primary, #6750a4);
+  margin-bottom: 0.25rem;
+}
+
+.resource-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.resource-label {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  margin-top: 0.2rem;
+}
+
+// Port utilization bars
+.port-util-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 120px;
+
+  mat-progress-bar {
+    flex: 1;
+  }
+}
+
+.port-util-pct {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  white-space: nowrap;
+  min-width: 3rem;
+  text-align: right;
+}
+
+// Responsive adjustments
+@media (max-width: 600px) {
+  .metrics-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .design-selector {
+    width: 100%;
+  }
+
+  .metrics-table {
+    font-size: 0.8rem;
+
+    th, td {
+      padding: 0.4rem 0.5rem;
+    }
+  }
+}

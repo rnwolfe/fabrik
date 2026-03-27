@@ -6,6 +6,7 @@ export * from './device';
 export * from './device-model';
 export * from './fabric';
 export * from './knowledge';
+export * from './metrics';
 export * from './port';
 export * from './rack';
 export * from './site';

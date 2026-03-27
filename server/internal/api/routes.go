@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes on mux.
-func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler, blocks *handlers.BlockHandler, management *handlers.ManagementHandler, capacity *handlers.CapacityHandler) {
+func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler, blocks *handlers.BlockHandler, management *handlers.ManagementHandler, capacity *handlers.CapacityHandler, metrics *handlers.MetricsHandler) {
 	// Design CRUD
 	mux.HandleFunc("POST /api/designs", designs.Create)
 	mux.HandleFunc("GET /api/designs", designs.List)
@@ -69,4 +69,7 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 
 	// Capacity aggregation
 	mux.HandleFunc("GET /api/designs/{id}/capacity", capacity.GetDesignCapacity)
+
+	// Design metrics
+	mux.HandleFunc("GET /api/designs/{id}/metrics", metrics.GetDesignMetrics)
 }
