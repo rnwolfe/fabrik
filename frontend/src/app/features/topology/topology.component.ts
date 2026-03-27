@@ -39,6 +39,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatListModule } from '@angular/material/list';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import { FabricService } from './fabric.service';
 import { ConfirmDialogComponent } from './confirm-dialog.component';
@@ -89,6 +90,7 @@ function minValueValidator(min: number) {
     MatChipsModule,
     MatListModule,
     MatTooltipModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './topology.component.html',
   styleUrl: './topology.component.scss',
@@ -110,6 +112,8 @@ export class TopologyComponent implements OnInit, OnDestroy {
   previewLoading = signal(false);
   previewError = signal<string | null>(null);
   serverWarnings = signal<string[]>([]);
+  /** Toggle state: whether the management network plane is shown in the topology view. */
+  showManagementPlane = signal(false);
 
   readonly stageCounts = [2, 3, 5] as const;
 
@@ -368,6 +372,10 @@ export class TopologyComponent implements OnInit, OnDestroy {
       .subscribe(models => {
         this.deviceModels.set(models ?? []);
       });
+  }
+
+  toggleManagementPlane(): void {
+    this.showManagementPlane.update(v => !v);
   }
 
   stagesForPreview(plan: TopologyPlan): { role: string; count: number }[] {

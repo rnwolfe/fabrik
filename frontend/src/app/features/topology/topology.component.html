@@ -4,10 +4,21 @@
       <h1>Clos Fabric Designer</h1>
       <p class="subtitle">Design multi-stage Clos topologies and assign hardware models.</p>
     </div>
-    <button mat-raised-button color="primary" (click)="openCreateForm()" [disabled]="showForm()">
-      <mat-icon>add</mat-icon>
-      New Fabric
-    </button>
+    <div class="page-actions">
+      <mat-slide-toggle
+        [checked]="showManagementPlane()"
+        (change)="toggleManagementPlane()"
+        aria-label="Show management network plane"
+        matTooltip="Toggle management network plane visibility"
+        class="mgmt-plane-toggle"
+      >
+        <span class="toggle-label">Management Plane</span>
+      </mat-slide-toggle>
+      <button mat-raised-button color="primary" (click)="openCreateForm()" [disabled]="showForm()">
+        <mat-icon>add</mat-icon>
+        New Fabric
+      </button>
+    </div>
   </div>
 
   <!-- Fabric designer form -->
@@ -240,6 +251,46 @@
         </button>
       </mat-card-actions>
     </mat-card>
+  }
+
+  <!-- Management plane panel -->
+  @if (showManagementPlane()) {
+    <section class="management-plane-panel" aria-label="Management network plane" role="region">
+      <mat-card class="mgmt-plane-card">
+        <mat-card-header>
+          <mat-card-title class="mgmt-plane-title">
+            <mat-icon class="mgmt-icon">settings_ethernet</mat-icon>
+            Management Network Plane
+          </mat-card-title>
+          <mat-card-subtitle>
+            Out-of-band management network. Each block has a management aggregation switch;
+            each rack has a management ToR that consumes RU and power.
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="mgmt-legend">
+            <div class="mgmt-legend-item">
+              <span class="mgmt-node-dot mgmt-node-tor" aria-hidden="true"></span>
+              <span>Management ToR (rack-level)</span>
+            </div>
+            <div class="mgmt-legend-item">
+              <span class="mgmt-node-dot mgmt-node-agg" aria-hidden="true"></span>
+              <span>Management Aggregation (block-level)</span>
+            </div>
+            <div class="mgmt-legend-item">
+              <span class="mgmt-link-line" aria-hidden="true"></span>
+              <span>Management uplink</span>
+            </div>
+          </div>
+          <p class="mgmt-info">
+            Use <strong>device role</strong> <code>management_tor</code> when placing devices
+            in racks to mark management ToR switches. Use
+            <code>management_agg</code> for block aggregation switches.
+            Configure block management aggregation via the blocks API.
+          </p>
+        </mat-card-content>
+      </mat-card>
+    </section>
   }
 
   <!-- Fabric list -->

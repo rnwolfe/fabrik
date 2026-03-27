@@ -592,3 +592,124 @@ func TestRackService_GetRackSummary_PowerWarning(t *testing.T) {
 		t.Error("expected power warning in summary, got empty")
 	}
 }
+
+func TestRackService_PlaceDevice_ManagementRoles(t *testing.T) {
+	tests := []struct {
+		name           string
+		role           string
+		rackHeightU    int
+		powerCapW      int
+		dmHeightU      int
+		dmPowerWatts   int
+		fillBeforehand int // how many 1U devices to fill before placing mgmt device
+		wantErr        bool
+		wantWarning    bool
+	}{
+		{
+			name:      "management_tor in empty rack",
+			role:      "management_tor",
+			rackHeightU: 42,
+			dmHeightU:   1,
+			wantErr:   false,
+			wantWarning: false,
+		},
+		{
+			name:      "management_agg in empty rack",
+			role:      "management_agg",
+			rackHeightU: 42,
+			dmHeightU:   1,
+			wantErr:   false,
+			wantWarning: false,
+		},
+		{
+			name:           "management_tor with RU overflow is a soft warning",
+			role:           "management_tor",
+			rackHeightU:    2,
+			dmHeightU:      1,
+			fillBeforehand: 2, // fill all 2U
+			wantErr:        false,
+			wantWarning:    true,
+		},
+		{
+			name:         "management_tor with power overflow is a soft warning",
+			role:         "management_tor",
+			rackHeightU:  42,
+			powerCapW:    100,
+			dmHeightU:    1,
+			dmPowerWatts: 200,
+			wantErr:      false,
+			wantWarning:  true,
+		},
+		{
+			name:    "invalid role",
+			role:    "bad_role",
+			rackHeightU: 42,
+			dmHeightU:   1,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, rr := newRackSvc()
+
+			powerWatts := tc.dmPowerWatts
+			dmID := rr.nextDeviceID + 1
+			rr.deviceModels[dmID] = &models.DeviceModel{
+				ID:         dmID,
+				Vendor:     "TestVendor",
+				Model:      "TestModel",
+				HeightU:    tc.dmHeightU,
+				PowerWatts: powerWatts,
+			}
+			rr.nextDeviceID = dmID
+
+			powerCap := tc.powerCapW
+			rack, _ := svc.CreateRack("test-rack", "", nil, nil, tc.rackHeightU, powerCap)
+
+			// Fill rack before placing management device.
+			if tc.fillBeforehand > 0 {
+				fillDmID := rr.nextDeviceID + 1
+				rr.deviceModels[fillDmID] = &models.DeviceModel{
+					ID: fillDmID, Vendor: "F", Model: "F", HeightU: 1,
+				}
+				rr.nextDeviceID = fillDmID
+				for i := 0; i < tc.fillBeforehand; i++ {
+					svc.PlaceDevice(rack.ID, fillDmID, "filler", "", "leaf", i+1)
+				}
+			}
+
+			result, err := svc.PlaceDevice(rack.ID, dmID, "mgmt-device", "", tc.role, 0)
+
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("PlaceDevice() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			if (result.Warning != "") != tc.wantWarning {
+				t.Errorf("PlaceDevice() warning = %q, wantWarning = %v", result.Warning, tc.wantWarning)
+			}
+		})
+	}
+}
+
+func TestRackService_PlaceDevice_ManagementCapacityWarning(t *testing.T) {
+	svc, _, rr := newRackSvc()
+
+	// 10U rack, 500W capacity; management ToR uses 1U and 600W.
+	dmID := rr.nextDeviceID + 1
+	rr.deviceModels[dmID] = &models.DeviceModel{
+		ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWatts: 600,
+	}
+	rr.nextDeviceID = dmID
+	rack, _ := svc.CreateRack("mgmt-rack", "", nil, nil, 10, 500)
+
+	result, err := svc.PlaceDevice(rack.ID, dmID, "mgmt-tor", "", "management_tor", 0)
+	if err != nil {
+		t.Fatalf("PlaceDevice management_tor: expected no error, got %v", err)
+	}
+	if result.Warning == "" {
+		t.Error("expected power capacity warning for management_tor, got none")
+	}
+}

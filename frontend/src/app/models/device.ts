@@ -1,7 +1,7 @@
 /**
  * DeviceRole mirrors the Go models.DeviceRole enum.
  */
-export type DeviceRole = 'spine' | 'leaf' | 'super_spine' | 'server' | 'other';
+export type DeviceRole = 'spine' | 'leaf' | 'super_spine' | 'server' | 'other' | 'management_tor' | 'management_agg';
 
 /**
  * Device mirrors the Go models.Device struct.

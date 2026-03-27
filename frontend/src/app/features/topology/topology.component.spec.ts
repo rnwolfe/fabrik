@@ -244,4 +244,63 @@ describe('TopologyComponent', () => {
     component.openCreateForm();
     expect(component.serverWarnings()).toEqual([]);
   });
+
+  // Management plane toggle tests
+  it('showManagementPlane should default to false', () => {
+    expect(component.showManagementPlane()).toBe(false);
+  });
+
+  it('toggleManagementPlane should toggle the signal from false to true', () => {
+    expect(component.showManagementPlane()).toBe(false);
+    component.toggleManagementPlane();
+    expect(component.showManagementPlane()).toBe(true);
+  });
+
+  it('toggleManagementPlane should toggle back from true to false', () => {
+    component.showManagementPlane.set(true);
+    component.toggleManagementPlane();
+    expect(component.showManagementPlane()).toBe(false);
+  });
+
+  it('should show management plane panel when showManagementPlane is true', () => {
+    component.showManagementPlane.set(true);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('.management-plane-panel')).toBeTruthy();
+  });
+
+  it('should hide management plane panel when showManagementPlane is false', () => {
+    component.showManagementPlane.set(false);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('.management-plane-panel')).toBeNull();
+  });
+
+  it('management plane panel should contain legend with distinct node colors', () => {
+    component.showManagementPlane.set(true);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const torDot = el.querySelector('.mgmt-node-tor');
+    const aggDot = el.querySelector('.mgmt-node-agg');
+    const linkLine = el.querySelector('.mgmt-link-line');
+    expect(torDot).toBeTruthy();
+    expect(aggDot).toBeTruthy();
+    expect(linkLine).toBeTruthy();
+  });
+
+  it('management plane panel should have accessible role and label', () => {
+    component.showManagementPlane.set(true);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const panel = el.querySelector('.management-plane-panel');
+    expect(panel?.getAttribute('role')).toBe('region');
+    const label = panel?.getAttribute('aria-label') ?? '';
+    expect(label.toLowerCase()).toContain('management');
+  });
+
+  it('toggle button should be present in page header', () => {
+    const el: HTMLElement = fixture.nativeElement;
+    const toggle = el.querySelector('.mgmt-plane-toggle');
+    expect(toggle).toBeTruthy();
+  });
 });

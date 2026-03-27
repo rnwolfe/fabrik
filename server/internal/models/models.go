@@ -97,12 +97,36 @@ type PlaceDeviceResult struct {
 type DeviceRole string
 
 const (
-	DeviceRoleSpine     DeviceRole = "spine"
-	DeviceRoleLeaf      DeviceRole = "leaf"
-	DeviceRoleSuperSpine DeviceRole = "super_spine"
-	DeviceRoleServer    DeviceRole = "server"
-	DeviceRoleOther     DeviceRole = "other"
+	DeviceRoleSpine         DeviceRole = "spine"
+	DeviceRoleLeaf          DeviceRole = "leaf"
+	DeviceRoleSuperSpine    DeviceRole = "super_spine"
+	DeviceRoleServer        DeviceRole = "server"
+	DeviceRoleOther         DeviceRole = "other"
+	DeviceRoleManagementToR DeviceRole = "management_tor"
+	DeviceRoleManagementAgg DeviceRole = "management_agg"
 )
+
+// NetworkPlane distinguishes the front-end fabric from the management plane.
+type NetworkPlane string
+
+const (
+	PlaneFrontEnd  NetworkPlane = "front_end"
+	PlaneManagement NetworkPlane = "management"
+)
+
+// BlockAggregation represents a block-level aggregation switch assignment for
+// a given network plane (front_end or management).
+type BlockAggregation struct {
+	ID            int64        `json:"id"`
+	BlockID       int64        `json:"block_id"`
+	Plane         NetworkPlane `json:"plane"`
+	DeviceID      *int64       `json:"device_id"`
+	MaxPorts      int          `json:"max_ports"`
+	UsedPorts     int          `json:"used_ports"`
+	Description   string       `json:"description"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+}
 
 // Device represents a physical network device installed in a rack.
 type Device struct {
