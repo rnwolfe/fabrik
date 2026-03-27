@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -170,5 +170,11 @@ export class CatalogComponent implements OnInit {
 
   onTypeFilterChange(value: string): void {
     this.typeFilter.set(value);
+  }
+
+  clearFilters(): void {
+    this.onSearchChange('');
+    this.onVendorFilterChange('');
+    this.onTypeFilterChange('');
   }
 }

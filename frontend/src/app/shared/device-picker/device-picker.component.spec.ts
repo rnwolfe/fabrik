@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/angular';
+import { render, screen } from '@testing-library/angular';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -89,7 +89,7 @@ describe('DevicePickerComponent', () => {
     const emitted: DeviceModel[] = [];
     comp.deviceDragStart.subscribe((dm: DeviceModel) => emitted.push(dm));
 
-    const mockEvent = { dataTransfer: { setData: () => {}, effectAllowed: '' } } as unknown as DragEvent;
+    const mockEvent = { dataTransfer: { setData: () => false, effectAllowed: '' } } as unknown as DragEvent;
     comp.onDragStart(mockEvent, mockModels[0]);
     expect(emitted.length).toBe(1);
   });

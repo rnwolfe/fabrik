@@ -1,9 +1,8 @@
-import { TestBed } from '@angular/core/testing';
-import { render, screen, fireEvent } from '@testing-library/angular';
+import { render, screen } from '@testing-library/angular';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { of, throwError } from 'rxjs';
+import { of } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { CatalogComponent } from './catalog.component';
 import { DeviceCatalogService } from './device-catalog.service';

@@ -144,7 +144,7 @@
         <mat-icon class="empty-icon">devices</mat-icon>
         <p>No device models found</p>
         @if (searchTerm() || vendorFilter() || typeFilter()) {
-          <button mat-button (click)="onSearchChange(''); onVendorFilterChange(''); onTypeFilterChange('')">
+          <button mat-button (click)="clearFilters()">
             Clear filters
           </button>
         }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -149,8 +150,5 @@ func validateDeviceModel(dm *models.DeviceModel) error {
 
 // isErrDuplicate reports whether err wraps models.ErrDuplicate.
 func isErrDuplicate(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(err.Error(), models.ErrDuplicate.Error())
+	return errors.Is(err, models.ErrDuplicate)
 }

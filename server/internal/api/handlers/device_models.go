@@ -49,6 +49,7 @@ func (h *DeviceModelHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
 			return
 		}
+		slog.Error("decode device model request", "err", err)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -142,6 +143,7 @@ func (h *DeviceModelHandler) Update(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
 			return
 		}
+		slog.Error("decode device model request", "err", err)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
