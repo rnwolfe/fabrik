@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
@@ -20,7 +21,7 @@ func newFakeBlockAggRepo() *fakeBlockAggRepo {
 }
 
 func aggKey(blockID int64, plane models.NetworkPlane) string {
-	return string(rune(blockID)) + ":" + string(plane)
+	return fmt.Sprintf("%d:%s", blockID, plane)
 }
 
 func (r *fakeBlockAggRepo) Upsert(agg *models.BlockAggregation) (*models.BlockAggregation, error) {

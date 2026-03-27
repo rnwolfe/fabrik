@@ -86,7 +86,7 @@ func (s *ManagementService) ListBlockAggregations(blockID int64) ([]*models.Bloc
 // enforcing the max_ports hard limit. Returns an error if capacity is exceeded.
 // If no management agg is assigned for the block, it returns a warning result instead.
 func (s *ManagementService) AllocateManagementPort(blockID int64) (*models.BlockAggregation, string, error) {
-	agg, err := s.aggRepo.Get(blockID, models.PlaneManagement)
+	_, err := s.aggRepo.Get(blockID, models.PlaneManagement)
 	if err != nil {
 		// No management agg assigned — not a hard failure, just a warning.
 		return nil, "no management aggregation assigned to this block; management ToR has no upstream connectivity", nil
@@ -98,7 +98,6 @@ func (s *ManagementService) AllocateManagementPort(blockID int64) (*models.Block
 		return nil, "", fmt.Errorf("%w: %s", models.ErrConflict, err.Error())
 	}
 
-	_ = agg
 	return updated, "", nil
 }
 

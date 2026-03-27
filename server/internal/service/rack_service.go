@@ -35,15 +35,29 @@ type RackRepository interface {
 	GetDeviceModel(id int64) (*models.DeviceModel, error)
 }
 
+// ManagementPortAllocator is the interface for management port allocation,
+// used by RackService to enforce management agg port capacity when placing management_tor devices.
+type ManagementPortAllocator interface {
+	AllocateManagementPort(blockID int64) (*models.BlockAggregation, string, error)
+}
+
 // RackService implements business logic for rack types, racks, and device placement.
 type RackService struct {
-	typeRepo RackTypeRepository
-	rackRepo RackRepository
+	typeRepo   RackTypeRepository
+	rackRepo   RackRepository
+	mgmtAlloc  ManagementPortAllocator
 }
 
 // NewRackService returns a new RackService.
 func NewRackService(typeRepo RackTypeRepository, rackRepo RackRepository) *RackService {
 	return &RackService{typeRepo: typeRepo, rackRepo: rackRepo}
+}
+
+// WithManagementAllocator attaches a management port allocator to the RackService.
+// When set, placing a management_tor device will enforce management agg port capacity.
+func (s *RackService) WithManagementAllocator(alloc ManagementPortAllocator) *RackService {
+	s.mgmtAlloc = alloc
+	return s
 }
 
 // --- Rack Type operations ---
@@ -355,6 +369,18 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 		}
 	}
 
+	// For management_tor devices: enforce management agg port capacity before placement.
+	// This check must happen before the device is written to the database.
+	var mgmtPortWarning string
+	if models.DeviceRole(role) == models.DeviceRoleManagementToR && s.mgmtAlloc != nil && rack.BlockID != nil {
+		_, warning, err := s.mgmtAlloc.AllocateManagementPort(*rack.BlockID)
+		if err != nil {
+			// Hard block: management agg is full.
+			return nil, fmt.Errorf("%w: management agg port capacity exceeded for block %d", models.ErrConflict, *rack.BlockID)
+		}
+		mgmtPortWarning = warning
+	}
+
 	d, err := s.rackRepo.PlaceDevice(&models.Device{
 		RackID:        rackID,
 		DeviceModelID: deviceModelID,
@@ -368,6 +394,15 @@ func (s *RackService) PlaceDevice(rackID, deviceModelID int64, name, description
 	}
 
 	result := &models.PlaceDeviceResult{Device: d}
+
+	// Append management port warning if present.
+	if mgmtPortWarning != "" {
+		if ruWarning != "" {
+			ruWarning = ruWarning + "; " + mgmtPortWarning
+		} else {
+			ruWarning = mgmtPortWarning
+		}
+	}
 
 	// Soft warning: power capacity exceeded or approaching threshold.
 	if rack.PowerCapacityW > 0 {
