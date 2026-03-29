@@ -111,8 +111,9 @@ function deriveTopology(
     oversubscription = uplinks > 0 ? downlinks / uplinks : Infinity;
   }
 
+  const leavesPerRack = 2;
   const maxLeaves = spineRadix;
-  const leafCount = Math.min(rackCount || 1, maxLeaves);
+  const leafCount = Math.min((rackCount || 1) * leavesPerRack, maxLeaves);
 
   return {
     stages: 2,
@@ -156,7 +157,7 @@ export default function BlockDetailPanel({
     [leafModel, spineModel, effectiveSpineCount, rackCount]
   );
 
-  const maxRacks = spineModel ? spineModel.port_count : 0;
+  const maxRacks = spineModel ? Math.floor(spineModel.port_count / 2) : 0;
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -237,10 +238,10 @@ export default function BlockDetailPanel({
       {/* Topology stats */}
       {topology && (
         <div className="grid grid-cols-2 gap-2">
+          <Stat icon={Layers} label="Racks" value={`${rackCount}${maxRacks ? `/${maxRacks}` : ''}`} />
+          <Stat icon={Server} label="Leaves" value={topology.leaf_count} />
           <Stat icon={Server} label="Spines" value={topology.spine_count} />
-          <Stat icon={Server} label="Leaves" value={`${rackCount}/${maxRacks}`} />
           <Stat icon={Zap} label="Host Ports" value={topology.total_host_ports} />
-          <Stat icon={Layers} label="Switches" value={topology.total_switches} />
         </div>
       )}
 

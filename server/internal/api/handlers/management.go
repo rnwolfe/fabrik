@@ -11,10 +11,10 @@ import (
 
 // ManagementService is the business logic interface required by ManagementHandler.
 type ManagementService interface {
-	SetManagementAgg(blockID int64, deviceModelID int64) (*models.BlockAggregation, error)
-	GetManagementAgg(blockID int64) (*models.BlockAggregation, error)
+	SetManagementAgg(blockID int64, deviceModelID int64) (*models.TierAggregation, error)
+	GetManagementAgg(blockID int64) (*models.TierAggregation, error)
 	RemoveManagementAgg(blockID int64) error
-	ListBlockAggregations(blockID int64) ([]*models.BlockAggregation, error)
+	ListBlockAggregations(blockID int64) ([]*models.TierAggregation, error)
 }
 
 // ManagementHandler handles HTTP requests for the management plane resources.

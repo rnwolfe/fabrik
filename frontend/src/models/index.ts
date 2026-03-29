@@ -128,11 +128,21 @@ export interface Block {
   updated_at: string;
 }
 
-export interface BlockAggregationSummary {
+export interface CreateBlockResult {
+  block: Block;
+  racks: RackSummary[];
+  warning?: string;
+}
+
+export type AggregationScope = 'block' | 'super_block' | 'site';
+
+export interface TierAggregationSummary {
   id: number;
-  block_id: number;
+  scope_type: AggregationScope;
+  scope_id: number;
   plane: NetworkPlane;
   device_model_id: number;
+  spine_count: number;
   total_ports: number;
   allocated_ports: number;
   available_ports: number;
@@ -142,14 +152,20 @@ export interface BlockAggregationSummary {
   updated_at: string;
 }
 
-export interface PortConnection {
+// Backward-compat alias — prefer TierAggregationSummary for new code.
+export type BlockAggregationSummary = TierAggregationSummary;
+
+export interface TierPortConnection {
   id: number;
-  block_aggregation_id: number;
-  rack_id: number;
+  tier_aggregation_id: number;
+  child_id: number;
   agg_port_index: number;
-  leaf_device_name: string;
+  child_device_name: string;
   created_at: string;
 }
+
+// Backward-compat alias — prefer TierPortConnection for new code.
+export type PortConnection = TierPortConnection;
 
 export interface AddRackToBlockResult {
   rack: RackSummary;

@@ -145,19 +145,22 @@ func TestBlockStore_GetDefaultBlock(t *testing.T) {
 	})
 }
 
-func TestBlockStore_SetAndGetAggregation(t *testing.T) {
+func TestTierAggregationStore_SetAndGetAggregation(t *testing.T) {
 	db := openTestDB(t)
 	superBlockID := seedBlockHier(t, db)
 	deviceModelID := seedDeviceModel(t, db, 32)
-	s := store.NewBlockStore(db)
+	bs := store.NewBlockStore(db)
+	s := store.NewTierAggregationStore(db)
 
-	block, _ := s.CreateBlock(&models.Block{SuperBlockID: superBlockID, Name: "row-A"})
+	block, _ := bs.CreateBlock(&models.Block{SuperBlockID: superBlockID, Name: "row-A"})
 
 	t.Run("set aggregation", func(t *testing.T) {
-		agg, err := s.SetAggregation(&models.BlockAggregation{
-			BlockID:       block.ID,
+		agg, err := s.SetAggregation(&models.TierAggregation{
+			ScopeType:     models.ScopeBlock,
+			ScopeID:       block.ID,
 			Plane:         models.NetworkPlaneFrontEnd,
 			DeviceModelID: deviceModelID,
+			SpineCount:    2,
 		})
 		if err != nil {
 			t.Fatalf("SetAggregation: %v", err)
@@ -168,10 +171,13 @@ func TestBlockStore_SetAndGetAggregation(t *testing.T) {
 		if agg.Plane != models.NetworkPlaneFrontEnd {
 			t.Errorf("expected plane frontend, got %q", agg.Plane)
 		}
+		if agg.SpineCount != 2 {
+			t.Errorf("expected spine_count 2, got %d", agg.SpineCount)
+		}
 	})
 
 	t.Run("get aggregation", func(t *testing.T) {
-		got, err := s.GetAggregation(block.ID, models.NetworkPlaneFrontEnd)
+		got, err := s.GetAggregation(models.ScopeBlock, block.ID, models.NetworkPlaneFrontEnd)
 		if err != nil {
 			t.Fatalf("GetAggregation: %v", err)
 		}
@@ -181,7 +187,7 @@ func TestBlockStore_SetAndGetAggregation(t *testing.T) {
 	})
 
 	t.Run("get not found for management plane", func(t *testing.T) {
-		_, err := s.GetAggregation(block.ID, models.NetworkPlaneManagement)
+		_, err := s.GetAggregation(models.ScopeBlock, block.ID, models.NetworkPlaneManagement)
 		if !errors.Is(err, models.ErrNotFound) {
 			t.Errorf("expected ErrNotFound, got %v", err)
 		}
@@ -189,10 +195,12 @@ func TestBlockStore_SetAndGetAggregation(t *testing.T) {
 
 	t.Run("upsert replaces device model", func(t *testing.T) {
 		dm2ID := seedDeviceModel(t, db, 64)
-		agg, err := s.SetAggregation(&models.BlockAggregation{
-			BlockID:       block.ID,
+		agg, err := s.SetAggregation(&models.TierAggregation{
+			ScopeType:     models.ScopeBlock,
+			ScopeID:       block.ID,
 			Plane:         models.NetworkPlaneFrontEnd,
 			DeviceModelID: dm2ID,
+			SpineCount:    4,
 		})
 		if err != nil {
 			t.Fatalf("SetAggregation upsert: %v", err)
@@ -200,25 +208,29 @@ func TestBlockStore_SetAndGetAggregation(t *testing.T) {
 		if agg.DeviceModelID != dm2ID {
 			t.Errorf("expected updated device_model_id %d, got %d", dm2ID, agg.DeviceModelID)
 		}
+		if agg.SpineCount != 4 {
+			t.Errorf("expected spine_count 4 after upsert, got %d", agg.SpineCount)
+		}
 
-		// Only one agg row should exist for this plane.
-		aggs, _ := s.ListAggregations(block.ID)
+		aggs, _ := s.ListAggregations(models.ScopeBlock, block.ID)
 		if len(aggs) != 1 {
 			t.Errorf("expected 1 agg row after upsert, got %d", len(aggs))
 		}
 	})
 }
 
-func TestBlockStore_AllocateAndDeallocatePorts(t *testing.T) {
+func TestTierAggregationStore_AllocateAndDeallocatePorts(t *testing.T) {
 	db := openTestDB(t)
 	superBlockID := seedBlockHier(t, db)
 	deviceModelID := seedDeviceModel(t, db, 32)
 	rackID := seedRack(t, db, "r1")
 
-	s := store.NewBlockStore(db)
-	block, _ := s.CreateBlock(&models.Block{SuperBlockID: superBlockID, Name: "row-A"})
-	agg, _ := s.SetAggregation(&models.BlockAggregation{
-		BlockID:       block.ID,
+	bs := store.NewBlockStore(db)
+	s := store.NewTierAggregationStore(db)
+	block, _ := bs.CreateBlock(&models.Block{SuperBlockID: superBlockID, Name: "row-A"})
+	agg, _ := s.SetAggregation(&models.TierAggregation{
+		ScopeType:     models.ScopeBlock,
+		ScopeID:       block.ID,
 		Plane:         models.NetworkPlaneFrontEnd,
 		DeviceModelID: deviceModelID,
 	})
@@ -259,9 +271,9 @@ func TestBlockStore_AllocateAndDeallocatePorts(t *testing.T) {
 		}
 	})
 
-	t.Run("deallocate ports by rack", func(t *testing.T) {
-		if err := s.DeallocatePortsByRack(rackID); err != nil {
-			t.Fatalf("DeallocatePortsByRack: %v", err)
+	t.Run("deallocate ports by child", func(t *testing.T) {
+		if err := s.DeallocatePortsByChild(rackID); err != nil {
+			t.Fatalf("DeallocatePortsByChild: %v", err)
 		}
 		count, _ := s.CountAllocatedPorts(agg.ID)
 		if count != 0 {
@@ -270,47 +282,45 @@ func TestBlockStore_AllocateAndDeallocatePorts(t *testing.T) {
 	})
 }
 
-func TestBlockStore_DeleteAggregationCascade(t *testing.T) {
+func TestTierAggregationStore_DeleteAggregationCascade(t *testing.T) {
 	db := openTestDB(t)
 	superBlockID := seedBlockHier(t, db)
 	deviceModelID := seedDeviceModel(t, db, 32)
 	rackID := seedRack(t, db, "r1")
 
-	s := store.NewBlockStore(db)
-	block, _ := s.CreateBlock(&models.Block{SuperBlockID: superBlockID, Name: "row-A"})
-	agg, _ := s.SetAggregation(&models.BlockAggregation{
-		BlockID:       block.ID,
+	bs := store.NewBlockStore(db)
+	s := store.NewTierAggregationStore(db)
+	block, _ := bs.CreateBlock(&models.Block{SuperBlockID: superBlockID, Name: "row-A"})
+	agg, _ := s.SetAggregation(&models.TierAggregation{
+		ScopeType:     models.ScopeBlock,
+		ScopeID:       block.ID,
 		Plane:         models.NetworkPlaneFrontEnd,
 		DeviceModelID: deviceModelID,
 	})
 
-	// Allocate some ports.
 	s.AllocatePorts(agg.ID, rackID, []string{"leaf-1"}, 0)
 
-	// Delete the aggregation.
-	if err := s.DeleteAggregation(block.ID, models.NetworkPlaneFrontEnd); err != nil {
+	if err := s.DeleteAggregation(models.ScopeBlock, block.ID, models.NetworkPlaneFrontEnd); err != nil {
 		t.Fatalf("DeleteAggregation: %v", err)
 	}
 
-	// Port connections should be gone (via CASCADE).
 	var count int
-	db.QueryRow(`SELECT COUNT(*) FROM port_connections WHERE block_aggregation_id = ?`, agg.ID).Scan(&count)
+	db.QueryRow(`SELECT COUNT(*) FROM tier_port_connections WHERE tier_aggregation_id = ?`, agg.ID).Scan(&count)
 	if count != 0 {
-		t.Errorf("expected 0 port_connections after cascade delete, got %d", count)
+		t.Errorf("expected 0 tier_port_connections after cascade delete, got %d", count)
 	}
 
-	// GetAggregation should return not found.
-	_, err := s.GetAggregation(block.ID, models.NetworkPlaneFrontEnd)
+	_, err := s.GetAggregation(models.ScopeBlock, block.ID, models.NetworkPlaneFrontEnd)
 	if !errors.Is(err, models.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 
-func TestBlockStore_DeleteAggregation_NotFound(t *testing.T) {
+func TestTierAggregationStore_DeleteAggregation_NotFound(t *testing.T) {
 	db := openTestDB(t)
-	s := store.NewBlockStore(db)
+	s := store.NewTierAggregationStore(db)
 
-	err := s.DeleteAggregation(9999, models.NetworkPlaneFrontEnd)
+	err := s.DeleteAggregation(models.ScopeBlock, 9999, models.NetworkPlaneFrontEnd)
 	if !errors.Is(err, models.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}

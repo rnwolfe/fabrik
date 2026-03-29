@@ -41,7 +41,7 @@ export default function BlockCard({
 
   const frontendAgg = aggs.find((a) => a.plane === 'front_end');
   const rackCount = racks.length;
-  const maxRacks = frontendAgg ? frontendAgg.total_ports : 0;
+  const maxRacks = frontendAgg ? Math.floor(frontendAgg.total_ports / 2) : 0;
   const utilPct = maxRacks > 0 ? Math.round((rackCount / maxRacks) * 100) : 0;
 
   return (

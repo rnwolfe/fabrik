@@ -1,22 +1,29 @@
 import { api } from './client';
-import type { Block, BlockAggregationSummary, AddRackToBlockResult, PortConnection } from '@/models';
+import type { Block, CreateBlockResult, TierAggregationSummary, AddRackToBlockResult, TierPortConnection } from '@/models';
 
 export const blocksApi = {
   list: (superBlockId: number) =>
     api.get<Block[]>(`/blocks?super_block_id=${superBlockId}`),
-  create: (data: { super_block_id: number; name: string; description?: string }) =>
-    api.post<Block>('/blocks', data),
+  create: (data: {
+    super_block_id: number;
+    name: string;
+    description?: string;
+    leaf_model_id?: number;
+    spine_model_id?: number;
+    spine_count?: number;
+  }) => api.post<CreateBlockResult>('/blocks', data),
   get: (id: number) => api.get<Block>(`/blocks/${id}`),
 
   // Aggregation (spine/leaf model assignment per plane)
-  assignAggregation: (blockId: number, plane: string, deviceModelId: number) =>
-    api.put<BlockAggregationSummary>(`/blocks/${blockId}/aggregations/${plane}`, {
+  assignAggregation: (blockId: number, plane: string, deviceModelId: number, spineCount?: number) =>
+    api.put<TierAggregationSummary>(`/blocks/${blockId}/aggregations/${plane}`, {
       device_model_id: deviceModelId,
+      spine_count: spineCount,
     }),
   getAggregation: (blockId: number, plane: string) =>
-    api.get<BlockAggregationSummary>(`/blocks/${blockId}/aggregations/${plane}`),
+    api.get<TierAggregationSummary>(`/blocks/${blockId}/aggregations/${plane}`),
   listAggregations: (blockId: number) =>
-    api.get<BlockAggregationSummary[]>(`/blocks/${blockId}/aggregations`),
+    api.get<TierAggregationSummary[]>(`/blocks/${blockId}/aggregations`),
   deleteAggregation: (blockId: number, plane: string) =>
     api.delete(`/blocks/${blockId}/aggregations/${plane}`),
 
@@ -27,7 +34,7 @@ export const blocksApi = {
 
   // Port connections
   listConnections: (blockId: number, plane: string) =>
-    api.get<PortConnection[]>(`/blocks/${blockId}/aggregations/${plane}/connections`),
+    api.get<TierPortConnection[]>(`/blocks/${blockId}/aggregations/${plane}/connections`),
 };
 
 export const scaffoldApi = {

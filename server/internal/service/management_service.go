@@ -8,12 +8,11 @@ import (
 )
 
 // ManagementAggRepository is the store interface for management aggregation operations.
-// BlockStore satisfies this interface.
 type ManagementAggRepository interface {
-	SetAggregation(agg *models.BlockAggregation) (*models.BlockAggregation, error)
-	GetAggregation(blockID int64, plane models.NetworkPlane) (*models.BlockAggregation, error)
-	ListAggregations(blockID int64) ([]*models.BlockAggregation, error)
-	DeleteAggregation(blockID int64, plane models.NetworkPlane) error
+	SetAggregation(agg *models.TierAggregation) (*models.TierAggregation, error)
+	GetAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) (*models.TierAggregation, error)
+	ListAggregations(scopeType models.AggregationScope, scopeID int64) ([]*models.TierAggregation, error)
+	DeleteAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) error
 	CountAllocatedPorts(aggID int64) (int, error)
 	GetDeviceModel(id int64) (*models.DeviceModel, error)
 }
@@ -32,13 +31,14 @@ func NewManagementService(repo ManagementAggRepository) *ManagementService {
 
 // SetManagementAgg assigns (or updates) the management aggregation switch model for a block.
 // deviceModelID is required; it determines port capacity via device_model.port_count.
-func (s *ManagementService) SetManagementAgg(blockID int64, deviceModelID int64) (*models.BlockAggregation, error) {
+func (s *ManagementService) SetManagementAgg(blockID int64, deviceModelID int64) (*models.TierAggregation, error) {
 	if deviceModelID <= 0 {
 		return nil, fmt.Errorf("%w: device_model_id is required", models.ErrConstraintViolation)
 	}
 
-	agg, err := s.repo.SetAggregation(&models.BlockAggregation{
-		BlockID:       blockID,
+	agg, err := s.repo.SetAggregation(&models.TierAggregation{
+		ScopeType:     models.ScopeBlock,
+		ScopeID:       blockID,
 		Plane:         models.PlaneManagement,
 		DeviceModelID: deviceModelID,
 	})
@@ -51,8 +51,8 @@ func (s *ManagementService) SetManagementAgg(blockID int64, deviceModelID int64)
 
 // GetManagementAgg returns the management aggregation record for a block.
 // Returns ErrNotFound if no management agg has been assigned.
-func (s *ManagementService) GetManagementAgg(blockID int64) (*models.BlockAggregation, error) {
-	agg, err := s.repo.GetAggregation(blockID, models.PlaneManagement)
+func (s *ManagementService) GetManagementAgg(blockID int64) (*models.TierAggregation, error) {
+	agg, err := s.repo.GetAggregation(models.ScopeBlock, blockID, models.PlaneManagement)
 	if err != nil {
 		return nil, fmt.Errorf("get management agg for block %d: %w", blockID, err)
 	}
@@ -61,7 +61,7 @@ func (s *ManagementService) GetManagementAgg(blockID int64) (*models.BlockAggreg
 
 // RemoveManagementAgg removes the management aggregation assignment from a block.
 func (s *ManagementService) RemoveManagementAgg(blockID int64) error {
-	if err := s.repo.DeleteAggregation(blockID, models.PlaneManagement); err != nil {
+	if err := s.repo.DeleteAggregation(models.ScopeBlock, blockID, models.PlaneManagement); err != nil {
 		return fmt.Errorf("remove management agg for block %d: %w", blockID, err)
 	}
 	slog.Info("management agg removed", "blockID", blockID)
@@ -69,13 +69,13 @@ func (s *ManagementService) RemoveManagementAgg(blockID int64) error {
 }
 
 // ListBlockAggregations returns all aggregation assignments for a block.
-func (s *ManagementService) ListBlockAggregations(blockID int64) ([]*models.BlockAggregation, error) {
-	aggs, err := s.repo.ListAggregations(blockID)
+func (s *ManagementService) ListBlockAggregations(blockID int64) ([]*models.TierAggregation, error) {
+	aggs, err := s.repo.ListAggregations(models.ScopeBlock, blockID)
 	if err != nil {
 		return nil, fmt.Errorf("list aggregations for block %d: %w", blockID, err)
 	}
 	if aggs == nil {
-		aggs = []*models.BlockAggregation{}
+		aggs = []*models.TierAggregation{}
 	}
 	return aggs, nil
 }
@@ -83,8 +83,8 @@ func (s *ManagementService) ListBlockAggregations(blockID int64) ([]*models.Bloc
 // AllocateManagementPort checks whether the block's management agg has capacity for one more
 // ToR uplink. Returns a warning (not an error) if no management agg is assigned.
 // Returns ErrConflict if the agg's port_count is fully allocated.
-func (s *ManagementService) AllocateManagementPort(blockID int64) (*models.BlockAggregation, string, error) {
-	agg, err := s.repo.GetAggregation(blockID, models.PlaneManagement)
+func (s *ManagementService) AllocateManagementPort(blockID int64) (*models.TierAggregation, string, error) {
+	agg, err := s.repo.GetAggregation(models.ScopeBlock, blockID, models.PlaneManagement)
 	if err != nil {
 		// No management agg assigned — not a hard failure, just a warning.
 		return nil, "no management aggregation assigned to this block; management ToR has no upstream connectivity", nil
