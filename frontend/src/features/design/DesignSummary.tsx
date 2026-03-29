@@ -36,8 +36,6 @@ export default function DesignSummary({
     }
   }
 
-  const stages = blocks.length <= 1 ? 2 : 3;
-
   return (
     <div className="flex flex-col gap-4 p-4">
       <h3 className="text-sm font-semibold">Design Summary</h3>
@@ -46,11 +44,6 @@ export default function DesignSummary({
         <SummaryCard icon={Layers} label="Blocks" value={blocks.length} />
         <SummaryCard icon={Box} label="Racks" value={totalRacks} />
         <SummaryCard icon={Server} label="Devices" value={totalDevices} />
-        <SummaryCard
-          icon={Layers}
-          label="Clos Stage"
-          value={`${stages}-stage`}
-        />
         <SummaryCard
           icon={Zap}
           label="Power (typ)"
