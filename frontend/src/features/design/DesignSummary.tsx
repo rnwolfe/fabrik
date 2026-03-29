@@ -1,15 +1,24 @@
-import { Server, Layers, Zap, Box, Cpu, HardDrive, MemoryStick } from 'lucide-react';
+import { Server, Layers, Zap, Box, Cpu, HardDrive, MemoryStick, Network } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { designsApi } from '@/api/designs';
 import type { Block, RackSummary } from '@/models';
 
 interface DesignSummaryProps {
+  designId: number;
   blocks: Block[];
   racksByBlock: Map<number, RackSummary[]>;
 }
 
 export default function DesignSummary({
+  designId,
   blocks,
   racksByBlock,
 }: DesignSummaryProps) {
+  const { data: derivedFabric } = useQuery({
+    queryKey: ['designs', designId, 'fabric'],
+    queryFn: () => designsApi.getDerivedFabric(designId),
+  });
+
   let totalRacks = 0;
   let totalDevices = 0;
   let totalPowerW = 0;
@@ -36,11 +45,16 @@ export default function DesignSummary({
     }
   }
 
+  const stageLabel = derivedFabric
+    ? `${derivedFabric.stages}-stage Clos`
+    : '—';
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <h3 className="text-sm font-semibold">Design Summary</h3>
 
       <div className="grid grid-cols-2 gap-2">
+        <SummaryCard icon={Network} label="Topology" value={stageLabel} />
         <SummaryCard icon={Layers} label="Blocks" value={blocks.length} />
         <SummaryCard icon={Box} label="Racks" value={totalRacks} />
         <SummaryCard icon={Server} label="Devices" value={totalDevices} />

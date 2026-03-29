@@ -6,31 +6,32 @@ import (
 	"math"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
-	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
 // MetricsRepository defines the database queries required by MetricsService.
 type MetricsRepository interface {
 	// GetDesignName returns the name of the design or models.ErrNotFound.
 	GetDesignName(designID int64) (string, error)
-	// ListFabricsByDesign returns all fabric records for the given design.
-	ListFabricsByDesign(designID int64) ([]*store.FabricRecord, error)
-	// GetDeviceModelByID returns the device model or models.ErrNotFound.
-	GetDeviceModelByID(id int64) (*models.DeviceModel, error)
 	// QueryDesignCapacity returns aggregated resource capacity for the design.
 	QueryDesignCapacity(designID int64) (*models.CapacitySummary, error)
 	// QueryDesignPowerAndRacks returns total draw and total rack capacity for the design.
 	QueryDesignPowerAndRacks(designID int64) (totalDrawW int, totalRackCapacityW int, err error)
 }
 
-// MetricsService computes on-demand metrics for a design.
-type MetricsService struct {
-	repo MetricsRepository
+// metricsDeriveFabric is the subset of DeriveFabricService used by MetricsService.
+type metricsDeriveFabric interface {
+	DeriveFabric(designID int64, plane models.NetworkPlane) (*DerivedFabric, error)
 }
 
-// NewMetricsService returns a new MetricsService backed by repo.
-func NewMetricsService(repo MetricsRepository) *MetricsService {
-	return &MetricsService{repo: repo}
+// MetricsService computes on-demand metrics for a design.
+type MetricsService struct {
+	repo    MetricsRepository
+	derived metricsDeriveFabric
+}
+
+// NewMetricsService returns a new MetricsService backed by repo and deriveSvc.
+func NewMetricsService(repo MetricsRepository, deriveSvc metricsDeriveFabric) *MetricsService {
+	return &MetricsService{repo: repo, derived: deriveSvc}
 }
 
 // GetDesignMetrics computes all metrics for the given design.
@@ -40,13 +41,13 @@ func (s *MetricsService) GetDesignMetrics(designID int64) (*models.DesignMetrics
 		return nil, fmt.Errorf("get design metrics %d: %w", designID, err)
 	}
 
-	fabrics, err := s.repo.ListFabricsByDesign(designID)
+	df, err := s.derived.DeriveFabric(designID, models.PlaneFrontEnd)
 	if err != nil {
-		return nil, fmt.Errorf("list fabrics for design %d: %w", designID, err)
+		return nil, fmt.Errorf("derive fabric for design %d: %w", designID, err)
 	}
 
-	// Compute fabric-level metrics.
-	fabricEntries, portEntries, totalSwitches, totalHostPorts, bisectionBW := s.computeFabricMetrics(fabrics)
+	// Compute fabric-level metrics from derived topology.
+	fabricEntries, portEntries, totalSwitches, totalHostPorts, bisectionBW := computeFabricMetrics(df)
 
 	// Identify choke point.
 	chokePoint := findChokePoint(fabricEntries)
@@ -73,14 +74,14 @@ func (s *MetricsService) GetDesignMetrics(designID int64) (*models.DesignMetrics
 		Power:                  power,
 		Capacity:               capacity,
 		PortUtilization:        portEntries,
-		Empty:                  deviceCount == 0 && len(fabrics) == 0,
+		Empty:                  deviceCount == 0 && len(df.Tiers) == 0,
 	}
 
 	return m, nil
 }
 
-// computeFabricMetrics builds per-fabric metric entries and computes totals.
-func (s *MetricsService) computeFabricMetrics(fabrics []*store.FabricRecord) (
+// computeFabricMetrics builds metric entries from the derived fabric topology.
+func computeFabricMetrics(df *DerivedFabric) (
 	entries []models.FabricMetricEntry,
 	portEntries []models.PortUtilizationEntry,
 	totalSwitches int,
@@ -90,82 +91,79 @@ func (s *MetricsService) computeFabricMetrics(fabrics []*store.FabricRecord) (
 	entries = []models.FabricMetricEntry{}
 	portEntries = []models.PortUtilizationEntry{}
 
-	for _, f := range fabrics {
-		topo, err := CalculateTopology(f.Stages, f.Radix, f.Oversubscription)
-		if err != nil {
-			continue
-		}
+	if df == nil || df.Topology == nil {
+		return
+	}
 
-		leafSpineOversub := 0.0
-		if topo.LeafUplinks > 0 {
-			leafSpineOversub = float64(topo.LeafDownlinks) / float64(topo.LeafUplinks)
-		}
+	topo := df.Topology
+	fabricID := df.DesignID
+	fabricName := "Derived Fabric"
 
-		spineSuperSpineOversub := 0.0
-		if topo.Stages >= 3 && topo.SpineCount > 0 {
-			// Each spine has radix ports; leaf uplinks consume topo.LeafCount ports,
-			// remaining go to super-spines.
-			spineUplinks := topo.Radix - topo.LeafCount
-			spineDownlinks := topo.LeafCount
-			if spineUplinks > 0 {
-				spineSuperSpineOversub = float64(spineDownlinks) / float64(spineUplinks)
-			}
-		}
+	leafSpineOversub := 0.0
+	if topo.LeafUplinks > 0 {
+		leafSpineOversub = float64(topo.LeafDownlinks) / float64(topo.LeafUplinks)
+	}
 
-		entry := models.FabricMetricEntry{
-			FabricID:                        f.ID,
-			FabricName:                      f.Name,
-			Tier:                            string(f.Tier),
-			Stages:                          topo.Stages,
-			LeafSpineOversubscription:       leafSpineOversub,
-			SpineSuperSpineOversubscription: spineSuperSpineOversub,
-			TotalSwitches:                   topo.TotalSwitches,
-			TotalHostPorts:                  topo.TotalHostPorts,
+	spineSuperSpineOversub := 0.0
+	if topo.Stages >= 3 && topo.SpineCount > 0 {
+		spineUplinks := topo.Radix - topo.LeafCount
+		spineDownlinks := topo.LeafCount
+		if spineUplinks > 0 {
+			spineSuperSpineOversub = float64(spineDownlinks) / float64(spineUplinks)
 		}
-		entries = append(entries, entry)
-		totalSwitches += topo.TotalSwitches
-		totalHostPorts += topo.TotalHostPorts
+	}
 
-		// Port utilization entries per tier.
-		leafTotal := topo.LeafCount * topo.Radix
-		leafAllocated := topo.LeafCount * (topo.LeafDownlinks + topo.LeafUplinks)
+	entry := models.FabricMetricEntry{
+		FabricID:                        fabricID,
+		FabricName:                      fabricName,
+		Tier:                            "front_end",
+		Stages:                          topo.Stages,
+		LeafSpineOversubscription:       leafSpineOversub,
+		SpineSuperSpineOversubscription: spineSuperSpineOversub,
+		TotalSwitches:                   topo.TotalSwitches,
+		TotalHostPorts:                  topo.TotalHostPorts,
+	}
+	entries = append(entries, entry)
+	totalSwitches += topo.TotalSwitches
+	totalHostPorts += topo.TotalHostPorts
+
+	// Port utilization entries per tier.
+	leafTotal := topo.LeafCount * topo.Radix
+	leafAllocated := topo.LeafCount * (topo.LeafDownlinks + topo.LeafUplinks)
+	portEntries = append(portEntries, models.PortUtilizationEntry{
+		FabricID:       fabricID,
+		FabricName:     fabricName,
+		TierName:       "leaf",
+		TotalPorts:     leafTotal,
+		AllocatedPorts: leafAllocated,
+		AvailablePorts: leafTotal - leafAllocated,
+	})
+
+	if topo.Stages >= 2 {
+		spineTotal := topo.SpineCount * topo.Radix
+		spinePortsPerSwitch := topo.LeafCount + topo.SuperSpineCount
+		spineAllocated := topo.SpineCount * spinePortsPerSwitch
 		portEntries = append(portEntries, models.PortUtilizationEntry{
-			FabricID:       f.ID,
-			FabricName:     f.Name,
-			TierName:       "leaf",
-			TotalPorts:     leafTotal,
-			AllocatedPorts: leafAllocated,
-			AvailablePorts: leafTotal - leafAllocated,
+			FabricID:       fabricID,
+			FabricName:     fabricName,
+			TierName:       "spine",
+			TotalPorts:     spineTotal,
+			AllocatedPorts: spineAllocated,
+			AvailablePorts: spineTotal - spineAllocated,
 		})
+	}
 
-		if topo.Stages >= 2 {
-			spineTotal := topo.SpineCount * topo.Radix
-			// Spine downlinks: one port per leaf. Spine uplinks (3-stage+): one port per super-spine.
-			spinePortsPerSwitch := topo.LeafCount + topo.SuperSpineCount
-			spineAllocated := topo.SpineCount * spinePortsPerSwitch
-			portEntries = append(portEntries, models.PortUtilizationEntry{
-				FabricID:       f.ID,
-				FabricName:     f.Name,
-				TierName:       "spine",
-				TotalPorts:     spineTotal,
-				AllocatedPorts: spineAllocated,
-				AvailablePorts: spineTotal - spineAllocated,
-			})
-		}
-
-		if topo.Stages >= 3 && topo.SuperSpineCount > 0 {
-			ssTotal := topo.SuperSpineCount * topo.Radix
-			ssAllocated := topo.SuperSpineCount * topo.SpineCount
-			portEntries = append(portEntries, models.PortUtilizationEntry{
-				FabricID:       f.ID,
-				FabricName:     f.Name,
-				TierName:       "super-spine",
-				TotalPorts:     ssTotal,
-				AllocatedPorts: ssAllocated,
-				AvailablePorts: ssTotal - ssAllocated,
-			})
-		}
-
+	if topo.Stages >= 3 && topo.SuperSpineCount > 0 {
+		ssTotal := topo.SuperSpineCount * topo.Radix
+		ssAllocated := topo.SuperSpineCount * topo.SpineCount
+		portEntries = append(portEntries, models.PortUtilizationEntry{
+			FabricID:       fabricID,
+			FabricName:     fabricName,
+			TierName:       "super-spine",
+			TotalPorts:     ssTotal,
+			AllocatedPorts: ssAllocated,
+			AvailablePorts: ssTotal - ssAllocated,
+		})
 	}
 
 	return entries, portEntries, totalSwitches, totalHostPorts, bisectionBW
@@ -240,4 +238,3 @@ func (s *MetricsService) computeCapacity(designID int64) (models.ResourceCapacit
 		TotalGPUCount:  cs.TotalGPUCount,
 	}, cs.DeviceCount, nil
 }
-
