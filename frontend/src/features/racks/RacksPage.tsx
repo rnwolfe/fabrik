@@ -12,7 +12,7 @@ import {
   ChevronRight,
   Server,
 } from 'lucide-react';
-import { racksApi } from '@/api/racks';
+import { racksApi, type RackInput, type RackTypeInput } from '@/api/racks';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -80,7 +80,7 @@ export default function RacksPage() {
 
   // Rack type mutations
   const createTypeMutation = useMutation({
-    mutationFn: (d: Partial<RackType>) => racksApi.createType(d),
+    mutationFn: (d: RackTypeInput) => racksApi.createType(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['rack-types'] }); setRackTypeDialogOpen(false); },
   });
   const updateTypeMutation = useMutation({
@@ -94,7 +94,7 @@ export default function RacksPage() {
 
   // Rack mutations
   const createRackMutation = useMutation({
-    mutationFn: (d: Partial<RackSummary>) => racksApi.create(d),
+    mutationFn: (d: RackInput) => racksApi.create(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['racks'] }); setRackDialogOpen(false); },
   });
   const updateRackMutation = useMutation({
