@@ -128,6 +128,12 @@ export interface Block {
   updated_at: string;
 }
 
+export interface CreateBlockResult {
+  block: Block;
+  racks: RackSummary[];
+  warning?: string;
+}
+
 export interface BlockAggregationSummary {
   id: number;
   block_id: number;

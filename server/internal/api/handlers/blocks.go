@@ -13,20 +13,20 @@ import (
 // BlockService is the business logic interface required by BlockHandler.
 type BlockService interface {
 	// Block operations
-	CreateBlock(superBlockID int64, name, description string) (*models.Block, error)
+	CreateBlock(superBlockID int64, name, description string, leafModelID, spineModelID *int64, spineCount int) (*models.CreateBlockResult, error)
 	GetBlock(id int64) (*models.Block, error)
 	ListBlocks(superBlockID int64) ([]*models.Block, error)
 
 	// Aggregation operations
-	AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64) (*models.BlockAggregationSummary, error)
-	GetAggregationSummary(blockID int64, plane models.NetworkPlane) (*models.BlockAggregationSummary, error)
-	ListAggregationSummaries(blockID int64) ([]*models.BlockAggregationSummary, error)
+	AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error)
+	GetAggregationSummary(blockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error)
+	ListAggregationSummaries(blockID int64) ([]*models.TierAggregationSummary, error)
 	DeleteAggregation(blockID int64, plane models.NetworkPlane) error
 
 	// Rack placement
 	AddRackToBlock(rackID int64, blockID *int64, superBlockID int64) (*models.AddRackToBlockResult, error)
 	RemoveRackFromBlock(rackID int64) error
-	ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.PortConnection, error)
+	ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.TierPortConnection, error)
 }
 
 // BlockHandler handles HTTP requests for block and block aggregation resources.
@@ -45,6 +45,9 @@ type createBlockRequest struct {
 	SuperBlockID int64  `json:"super_block_id"`
 	Name         string `json:"name"`
 	Description  string `json:"description"`
+	LeafModelID  *int64 `json:"leaf_model_id"`
+	SpineModelID *int64 `json:"spine_model_id"`
+	SpineCount   int    `json:"spine_count"`
 }
 
 // CreateBlock handles POST /api/blocks.
@@ -61,7 +64,7 @@ func (h *BlockHandler) CreateBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := h.svc.CreateBlock(req.SuperBlockID, req.Name, req.Description)
+	result, err := h.svc.CreateBlock(req.SuperBlockID, req.Name, req.Description, req.LeafModelID, req.SpineModelID, req.SpineCount)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
@@ -71,7 +74,7 @@ func (h *BlockHandler) CreateBlock(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeJSON(w, http.StatusCreated, b)
+	writeJSON(w, http.StatusCreated, result)
 }
 
 // GetBlock handles GET /api/blocks/{id}.
@@ -126,6 +129,7 @@ func (h *BlockHandler) ListBlocks(w http.ResponseWriter, r *http.Request) {
 type assignAggregationRequest struct {
 	Plane         string `json:"plane"`
 	DeviceModelID int64  `json:"device_model_id"`
+	SpineCount    int    `json:"spine_count"`
 }
 
 // AssignAggregation handles PUT /api/blocks/{id}/aggregations/{plane}.
@@ -152,7 +156,7 @@ func (h *BlockHandler) AssignAggregation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	summary, err := h.svc.AssignAggregation(blockID, plane, req.DeviceModelID)
+	summary, err := h.svc.AssignAggregation(blockID, plane, req.DeviceModelID, req.SpineCount)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			writeError(w, http.StatusNotFound, err.Error())
@@ -212,7 +216,7 @@ func (h *BlockHandler) ListAggregations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if summaries == nil {
-		summaries = []*models.BlockAggregationSummary{}
+		summaries = []*models.TierAggregationSummary{}
 	}
 	writeJSON(w, http.StatusOK, summaries)
 }
@@ -330,7 +334,7 @@ func (h *BlockHandler) ListPortConnections(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if conns == nil {
-		conns = []*models.PortConnection{}
+		conns = []*models.TierPortConnection{}
 	}
 	writeJSON(w, http.StatusOK, conns)
 }

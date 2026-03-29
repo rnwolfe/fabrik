@@ -243,42 +243,61 @@ const (
 	NetworkPlaneManagement NetworkPlane = "management"
 )
 
-// BlockAggregation represents an aggregation switch model assigned to a block for a given plane.
-// One aggregation switch is allowed per (block, plane) pair.
-type BlockAggregation struct {
-	ID            int64        `json:"id"`
-	BlockID       int64        `json:"block_id"`
-	Plane         NetworkPlane `json:"plane"`
-	DeviceModelID int64        `json:"device_model_id"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
+// AggregationScope enumerates the hierarchy levels that can hold a tier aggregation.
+type AggregationScope string
+
+const (
+	ScopeBlock      AggregationScope = "block"
+	ScopeSuperBlock AggregationScope = "super_block"
+	ScopeSite       AggregationScope = "site"
+)
+
+// TierAggregation represents an aggregation switch assignment at any hierarchy level.
+// One aggregation is allowed per (scope_type, scope_id, plane) tuple.
+type TierAggregation struct {
+	ID            int64            `json:"id"`
+	ScopeType     AggregationScope `json:"scope_type"`
+	ScopeID       int64            `json:"scope_id"`
+	Plane         NetworkPlane     `json:"plane"`
+	DeviceModelID int64            `json:"device_model_id"`
+	SpineCount    int              `json:"spine_count"`
+	CreatedAt     time.Time        `json:"created_at"`
+	UpdatedAt     time.Time        `json:"updated_at"`
 }
 
-// BlockAggregationSummary extends BlockAggregation with capacity utilization.
-type BlockAggregationSummary struct {
-	BlockAggregation
-	TotalPorts      int    `json:"total_ports"`
-	AllocatedPorts  int    `json:"allocated_ports"`
-	AvailablePorts  int    `json:"available_ports"`
-	Utilization     string `json:"utilization"`
-	Warning         string `json:"warning,omitempty"`
+// TierAggregationSummary extends TierAggregation with capacity utilization.
+type TierAggregationSummary struct {
+	TierAggregation
+	TotalPorts     int    `json:"total_ports"`
+	AllocatedPorts int    `json:"allocated_ports"`
+	AvailablePorts int    `json:"available_ports"`
+	Utilization    string `json:"utilization"`
+	Warning        string `json:"warning,omitempty"`
 }
 
-// PortConnection represents a single port allocation between a rack and a block's agg switch.
-type PortConnection struct {
-	ID                  int64     `json:"id"`
-	BlockAggregationID  int64     `json:"block_aggregation_id"`
-	RackID              int64     `json:"rack_id"`
-	AggPortIndex        int       `json:"agg_port_index"`
-	LeafDeviceName      string    `json:"leaf_device_name"`
-	CreatedAt           time.Time `json:"created_at"`
+// TierPortConnection represents a single port allocation between a child entity and a parent aggregation switch.
+// At block level, ChildID is a rack ID; at super_block level, ChildID is a block ID.
+type TierPortConnection struct {
+	ID                int64     `json:"id"`
+	TierAggregationID int64     `json:"tier_aggregation_id"`
+	ChildID           int64     `json:"child_id"`
+	AggPortIndex      int       `json:"agg_port_index"`
+	ChildDeviceName   string    `json:"child_device_name"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // AddRackToBlockResult is returned when a rack is added to a block.
 type AddRackToBlockResult struct {
-	Rack        *Rack                  `json:"rack"`
-	Connections []*PortConnection      `json:"connections"`
-	Warning     string                 `json:"warning,omitempty"`
+	Rack        *Rack                `json:"rack"`
+	Connections []*TierPortConnection `json:"connections"`
+	Warning     string               `json:"warning,omitempty"`
+}
+
+// CreateBlockResult is returned when a block is created with optional auto-rack provisioning.
+type CreateBlockResult struct {
+	Block   *Block  `json:"block"`
+	Racks   []*Rack `json:"racks"`
+	Warning string  `json:"warning,omitempty"`
 }
 
 // FabricTier enumerates whether a fabric tier is a front-end or back-end network.

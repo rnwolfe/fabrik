@@ -12,39 +12,38 @@ import (
 // --- Fake management agg repository ---
 
 type fakeManagementAggRepo struct {
-	aggs       map[string]*models.BlockAggregation // key: "blockID:plane"
-	portCounts map[int64]int                       // key: aggID → allocated port count
-	models     map[int64]*models.DeviceModel       // key: deviceModelID
+	aggs       map[string]*models.TierAggregation // key: "scopeType:scopeID:plane"
+	portCounts map[int64]int                      // key: aggID → allocated port count
+	models     map[int64]*models.DeviceModel      // key: deviceModelID
 	nextID     int64
 }
 
 func newFakeManagementAggRepo() *fakeManagementAggRepo {
 	return &fakeManagementAggRepo{
-		aggs:       make(map[string]*models.BlockAggregation),
+		aggs:       make(map[string]*models.TierAggregation),
 		portCounts: make(map[int64]int),
 		models:     make(map[int64]*models.DeviceModel),
 	}
 }
 
-func (r *fakeManagementAggRepo) aggKey(blockID int64, plane models.NetworkPlane) string {
-	return fmt.Sprintf("%d:%s", blockID, plane)
+func (r *fakeManagementAggRepo) aggKey(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) string {
+	return fmt.Sprintf("%s:%d:%s", scopeType, scopeID, plane)
 }
 
-// addDeviceModel registers a device model in the fake repo for testing.
 func (r *fakeManagementAggRepo) addDeviceModel(id int64, portCount int) {
 	r.models[id] = &models.DeviceModel{ID: id, PortCount: portCount, Vendor: "test", Model: "test"}
 }
 
-// setAllocatedPorts sets the simulated allocated port count for an agg.
 func (r *fakeManagementAggRepo) setAllocatedPorts(aggID int64, count int) {
 	r.portCounts[aggID] = count
 }
 
-func (r *fakeManagementAggRepo) SetAggregation(agg *models.BlockAggregation) (*models.BlockAggregation, error) {
-	key := r.aggKey(agg.BlockID, agg.Plane)
+func (r *fakeManagementAggRepo) SetAggregation(agg *models.TierAggregation) (*models.TierAggregation, error) {
+	key := r.aggKey(agg.ScopeType, agg.ScopeID, agg.Plane)
 	if existing, ok := r.aggs[key]; ok {
 		cp := *existing
 		cp.DeviceModelID = agg.DeviceModelID
+		cp.SpineCount = agg.SpineCount
 		r.aggs[key] = &cp
 		return &cp, nil
 	}
@@ -55,8 +54,8 @@ func (r *fakeManagementAggRepo) SetAggregation(agg *models.BlockAggregation) (*m
 	return &out, nil
 }
 
-func (r *fakeManagementAggRepo) GetAggregation(blockID int64, plane models.NetworkPlane) (*models.BlockAggregation, error) {
-	key := r.aggKey(blockID, plane)
+func (r *fakeManagementAggRepo) GetAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) (*models.TierAggregation, error) {
+	key := r.aggKey(scopeType, scopeID, plane)
 	a, ok := r.aggs[key]
 	if !ok {
 		return nil, models.ErrNotFound
@@ -65,10 +64,10 @@ func (r *fakeManagementAggRepo) GetAggregation(blockID int64, plane models.Netwo
 	return &cp, nil
 }
 
-func (r *fakeManagementAggRepo) ListAggregations(blockID int64) ([]*models.BlockAggregation, error) {
-	var out []*models.BlockAggregation
+func (r *fakeManagementAggRepo) ListAggregations(scopeType models.AggregationScope, scopeID int64) ([]*models.TierAggregation, error) {
+	var out []*models.TierAggregation
 	for _, a := range r.aggs {
-		if a.BlockID == blockID {
+		if a.ScopeType == scopeType && a.ScopeID == scopeID {
 			cp := *a
 			out = append(out, &cp)
 		}
@@ -76,8 +75,8 @@ func (r *fakeManagementAggRepo) ListAggregations(blockID int64) ([]*models.Block
 	return out, nil
 }
 
-func (r *fakeManagementAggRepo) DeleteAggregation(blockID int64, plane models.NetworkPlane) error {
-	key := r.aggKey(blockID, plane)
+func (r *fakeManagementAggRepo) DeleteAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) error {
+	key := r.aggKey(scopeType, scopeID, plane)
 	if _, ok := r.aggs[key]; !ok {
 		return models.ErrNotFound
 	}
@@ -139,8 +138,8 @@ func TestSetManagementAgg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetManagementAgg() error = %v", err)
 	}
-	if agg.BlockID != 1 {
-		t.Errorf("BlockID = %d, want 1", agg.BlockID)
+	if agg.ScopeID != 1 {
+		t.Errorf("ScopeID = %d, want 1", agg.ScopeID)
 	}
 	if agg.Plane != models.PlaneManagement {
 		t.Errorf("Plane = %v, want %v", agg.Plane, models.PlaneManagement)
@@ -219,7 +218,6 @@ func TestAllocateManagementPort_NoAgg(t *testing.T) {
 	repo := newFakeManagementAggRepo()
 	svc := service.NewManagementService(repo)
 
-	// No agg assigned — should return a warning string, not an error.
 	agg, warning, err := svc.AllocateManagementPort(1)
 	if err != nil {
 		t.Fatalf("AllocateManagementPort() error = %v", err)
@@ -241,10 +239,8 @@ func TestAllocateManagementPort_WithinCapacity(t *testing.T) {
 		t.Fatalf("SetManagementAgg() error = %v", err)
 	}
 
-	// Simulate port allocation by checking 0-3 allocated ports all succeed.
 	for i := 0; i < 4; i++ {
-		// Manually set the count to simulate previous allocations.
-		agg, err := repo.GetAggregation(1, models.PlaneManagement)
+		agg, err := repo.GetAggregation(models.ScopeBlock, 1, models.PlaneManagement)
 		if err != nil {
 			t.Fatalf("GetAggregation() error = %v", err)
 		}
@@ -272,14 +268,12 @@ func TestAllocateManagementPort_CapacityExceeded(t *testing.T) {
 		t.Fatalf("SetManagementAgg() error = %v", err)
 	}
 
-	// Fill to capacity.
-	agg, err := repo.GetAggregation(1, models.PlaneManagement)
+	agg, err := repo.GetAggregation(models.ScopeBlock, 1, models.PlaneManagement)
 	if err != nil {
 		t.Fatalf("GetAggregation() error = %v", err)
 	}
-	repo.setAllocatedPorts(agg.ID, 2) // fully allocated
+	repo.setAllocatedPorts(agg.ID, 2)
 
-	// Exceed capacity — should return ErrConflict.
 	_, _, err = svc.AllocateManagementPort(1)
 	if err == nil {
 		t.Fatal("expected error when exceeding management agg port capacity")

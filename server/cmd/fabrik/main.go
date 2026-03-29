@@ -43,9 +43,13 @@ func main() {
 	deviceModelSvc := service.NewDeviceModelService(deviceModelStore)
 	deviceModelHandler := handlers.NewDeviceModelHandler(deviceModelSvc)
 
-	// Wire up blocks and block aggregation (blockStore satisfies both BlockRepository and ManagementAggRepository).
+	// Wire up tier aggregation (shared by block and management services).
 	blockStore := store.NewBlockStore(db)
-	managementSvc := service.NewManagementService(blockStore)
+	tierAggStore := store.NewTierAggregationStore(db)
+
+	// Composite repo satisfies both BlockRepository and ManagementAggRepository.
+	blockRepo := &store.BlockCompositeRepo{BlockStore: blockStore, TierAggregationStore: tierAggStore}
+	managementSvc := service.NewManagementService(blockRepo)
 	managementHandler := handlers.NewManagementHandler(managementSvc)
 
 	// Wire up rack types and racks; inject management allocator for management_tor placement
@@ -58,7 +62,7 @@ func main() {
 	fabricSvc := service.NewFabricService(fabricStore)
 	fabricHandler := handlers.NewFabricHandler(fabricSvc)
 
-	blockSvc := service.NewBlockService(blockStore)
+	blockSvc := service.NewBlockService(blockRepo)
 	blockHandler := handlers.NewBlockHandler(blockSvc)
 
 	// Wire up capacity aggregation

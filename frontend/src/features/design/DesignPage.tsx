@@ -154,10 +154,13 @@ export default function DesignPage() {
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const createBlockMutation = useMutation({
-    mutationFn: (data: { super_block_id: number; name: string }) => blocksApi.create(data),
-    onSuccess: (block) => {
+    mutationFn: (data: { super_block_id: number; name: string; leaf_model_id?: number }) =>
+      blocksApi.create(data),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['blocks'] });
-      setSelectedBlockId(block.id);
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['aggs'] });
+      setSelectedBlockId(result.block.id);
       setBlockDialogOpen(false);
       blockReset();
     },
@@ -230,11 +233,8 @@ export default function DesignPage() {
     createBlockMutation.mutate({
       super_block_id: superBlockId,
       name: data.name,
+      leaf_model_id: data.leaf_model_id,
     });
-    // If a leaf model was selected, assign it as the frontend aggregation
-    if (data.leaf_model_id) {
-      // We'll do this after block creation in onSuccess
-    }
   });
 
   const handleAddRack = rackHandleSubmit((data) => {

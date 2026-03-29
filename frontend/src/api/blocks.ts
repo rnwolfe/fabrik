@@ -1,11 +1,17 @@
 import { api } from './client';
-import type { Block, BlockAggregationSummary, AddRackToBlockResult, PortConnection } from '@/models';
+import type { Block, CreateBlockResult, BlockAggregationSummary, AddRackToBlockResult, PortConnection } from '@/models';
 
 export const blocksApi = {
   list: (superBlockId: number) =>
     api.get<Block[]>(`/blocks?super_block_id=${superBlockId}`),
-  create: (data: { super_block_id: number; name: string; description?: string }) =>
-    api.post<Block>('/blocks', data),
+  create: (data: {
+    super_block_id: number;
+    name: string;
+    description?: string;
+    leaf_model_id?: number;
+    spine_model_id?: number;
+    spine_count?: number;
+  }) => api.post<CreateBlockResult>('/blocks', data),
   get: (id: number) => api.get<Block>(`/blocks/${id}`),
 
   // Aggregation (spine/leaf model assignment per plane)

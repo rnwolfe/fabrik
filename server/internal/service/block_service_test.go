@@ -12,24 +12,24 @@ import (
 
 type fakeBlockRepo struct {
 	blocks       map[int64]*models.Block
-	aggs         map[int64]*models.BlockAggregation // keyed by (blockID*100 + plane-hash) — we use aggID key
-	portConns    map[int64]*models.PortConnection
+	aggs         map[int64]*models.TierAggregation
+	portConns    map[int64]*models.TierPortConnection
 	deviceModels map[int64]*models.DeviceModel
 	racks        map[int64]*models.Rack
 	devices      map[int64]*models.Device
 
-	nextBlockID   int64
-	nextAggID     int64
-	nextConnID    int64
-	nextDeviceID  int64
-	nextRackID    int64
+	nextBlockID  int64
+	nextAggID    int64
+	nextConnID   int64
+	nextDeviceID int64
+	nextRackID   int64
 }
 
 func newFakeBlockRepo() *fakeBlockRepo {
 	return &fakeBlockRepo{
 		blocks:       make(map[int64]*models.Block),
-		aggs:         make(map[int64]*models.BlockAggregation),
-		portConns:    make(map[int64]*models.PortConnection),
+		aggs:         make(map[int64]*models.TierAggregation),
+		portConns:    make(map[int64]*models.TierPortConnection),
 		deviceModels: make(map[int64]*models.DeviceModel),
 		racks:        make(map[int64]*models.Rack),
 		devices:      make(map[int64]*models.Device),
@@ -96,11 +96,11 @@ func (r *fakeBlockRepo) GetDefaultBlock(superBlockID int64) (*models.Block, erro
 	return nil, nil
 }
 
-func (r *fakeBlockRepo) SetAggregation(agg *models.BlockAggregation) (*models.BlockAggregation, error) {
-	// Check if exists — update or insert.
+func (r *fakeBlockRepo) SetAggregation(agg *models.TierAggregation) (*models.TierAggregation, error) {
 	for id, a := range r.aggs {
-		if a.BlockID == agg.BlockID && a.Plane == agg.Plane {
+		if a.ScopeType == agg.ScopeType && a.ScopeID == agg.ScopeID && a.Plane == agg.Plane {
 			a.DeviceModelID = agg.DeviceModelID
+			a.SpineCount = agg.SpineCount
 			r.aggs[id] = a
 			cp := *a
 			return &cp, nil
@@ -113,9 +113,9 @@ func (r *fakeBlockRepo) SetAggregation(agg *models.BlockAggregation) (*models.Bl
 	return &out, nil
 }
 
-func (r *fakeBlockRepo) GetAggregation(blockID int64, plane models.NetworkPlane) (*models.BlockAggregation, error) {
+func (r *fakeBlockRepo) GetAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) (*models.TierAggregation, error) {
 	for _, a := range r.aggs {
-		if a.BlockID == blockID && a.Plane == plane {
+		if a.ScopeType == scopeType && a.ScopeID == scopeID && a.Plane == plane {
 			cp := *a
 			return &cp, nil
 		}
@@ -123,10 +123,10 @@ func (r *fakeBlockRepo) GetAggregation(blockID int64, plane models.NetworkPlane)
 	return nil, models.ErrNotFound
 }
 
-func (r *fakeBlockRepo) ListAggregations(blockID int64) ([]*models.BlockAggregation, error) {
-	var out []*models.BlockAggregation
+func (r *fakeBlockRepo) ListAggregations(scopeType models.AggregationScope, scopeID int64) ([]*models.TierAggregation, error) {
+	var out []*models.TierAggregation
 	for _, a := range r.aggs {
-		if a.BlockID == blockID {
+		if a.ScopeType == scopeType && a.ScopeID == scopeID {
 			cp := *a
 			out = append(out, &cp)
 		}
@@ -134,12 +134,11 @@ func (r *fakeBlockRepo) ListAggregations(blockID int64) ([]*models.BlockAggregat
 	return out, nil
 }
 
-func (r *fakeBlockRepo) DeleteAggregation(blockID int64, plane models.NetworkPlane) error {
+func (r *fakeBlockRepo) DeleteAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) error {
 	for id, a := range r.aggs {
-		if a.BlockID == blockID && a.Plane == plane {
-			// Remove all port connections for this agg.
+		if a.ScopeType == scopeType && a.ScopeID == scopeID && a.Plane == plane {
 			for cid, pc := range r.portConns {
-				if pc.BlockAggregationID == id {
+				if pc.TierAggregationID == id {
 					delete(r.portConns, cid)
 				}
 			}
@@ -150,16 +149,16 @@ func (r *fakeBlockRepo) DeleteAggregation(blockID int64, plane models.NetworkPla
 	return models.ErrNotFound
 }
 
-func (r *fakeBlockRepo) AllocatePorts(aggID, rackID int64, leafNames []string, startPortIndex int) ([]*models.PortConnection, error) {
-	var out []*models.PortConnection
-	for i, name := range leafNames {
+func (r *fakeBlockRepo) AllocatePorts(aggID, childID int64, childNames []string, startPortIndex int) ([]*models.TierPortConnection, error) {
+	var out []*models.TierPortConnection
+	for i, name := range childNames {
 		r.nextConnID++
-		pc := &models.PortConnection{
-			ID:                 r.nextConnID,
-			BlockAggregationID: aggID,
-			RackID:             rackID,
-			AggPortIndex:       startPortIndex + i,
-			LeafDeviceName:     name,
+		pc := &models.TierPortConnection{
+			ID:                r.nextConnID,
+			TierAggregationID: aggID,
+			ChildID:           childID,
+			AggPortIndex:      startPortIndex + i,
+			ChildDeviceName:   name,
 		}
 		r.portConns[pc.ID] = pc
 		out = append(out, pc)
@@ -167,18 +166,18 @@ func (r *fakeBlockRepo) AllocatePorts(aggID, rackID int64, leafNames []string, s
 	return out, nil
 }
 
-func (r *fakeBlockRepo) DeallocatePorts(aggID, rackID int64) error {
+func (r *fakeBlockRepo) DeallocatePorts(aggID, childID int64) error {
 	for id, pc := range r.portConns {
-		if pc.BlockAggregationID == aggID && pc.RackID == rackID {
+		if pc.TierAggregationID == aggID && pc.ChildID == childID {
 			delete(r.portConns, id)
 		}
 	}
 	return nil
 }
 
-func (r *fakeBlockRepo) DeallocatePortsByRack(rackID int64) error {
+func (r *fakeBlockRepo) DeallocatePortsByChild(childID int64) error {
 	for id, pc := range r.portConns {
-		if pc.RackID == rackID {
+		if pc.ChildID == childID {
 			delete(r.portConns, id)
 		}
 	}
@@ -188,17 +187,17 @@ func (r *fakeBlockRepo) DeallocatePortsByRack(rackID int64) error {
 func (r *fakeBlockRepo) CountAllocatedPorts(aggID int64) (int, error) {
 	count := 0
 	for _, pc := range r.portConns {
-		if pc.BlockAggregationID == aggID {
+		if pc.TierAggregationID == aggID {
 			count++
 		}
 	}
 	return count, nil
 }
 
-func (r *fakeBlockRepo) ListPortConnections(aggID int64) ([]*models.PortConnection, error) {
-	var out []*models.PortConnection
+func (r *fakeBlockRepo) ListPortConnections(aggID int64) ([]*models.TierPortConnection, error) {
+	var out []*models.TierPortConnection
 	for _, pc := range r.portConns {
-		if pc.BlockAggregationID == aggID {
+		if pc.TierAggregationID == aggID {
 			cp := *pc
 			out = append(out, &cp)
 		}
@@ -206,10 +205,10 @@ func (r *fakeBlockRepo) ListPortConnections(aggID int64) ([]*models.PortConnecti
 	return out, nil
 }
 
-func (r *fakeBlockRepo) ListPortConnectionsByRack(aggID, rackID int64) ([]*models.PortConnection, error) {
-	var out []*models.PortConnection
+func (r *fakeBlockRepo) ListPortConnectionsByChild(aggID, childID int64) ([]*models.TierPortConnection, error) {
+	var out []*models.TierPortConnection
 	for _, pc := range r.portConns {
-		if pc.BlockAggregationID == aggID && pc.RackID == rackID {
+		if pc.TierAggregationID == aggID && pc.ChildID == childID {
 			cp := *pc
 			out = append(out, &cp)
 		}
@@ -255,6 +254,33 @@ func (r *fakeBlockRepo) GetRack(id int64) (*models.Rack, error) {
 	return &cp, nil
 }
 
+func (r *fakeBlockRepo) CreateRack(rack *models.Rack) (*models.Rack, error) {
+	r.nextRackID++
+	out := *rack
+	out.ID = r.nextRackID
+	r.racks[out.ID] = &out
+	return &out, nil
+}
+
+func (r *fakeBlockRepo) PlaceDevice(d *models.Device) (*models.Device, error) {
+	r.nextDeviceID++
+	out := *d
+	out.ID = r.nextDeviceID
+	r.devices[out.ID] = &out
+	return &out, nil
+}
+
+// --- helper to create a TierAggregation at block scope (used in test setup) ---
+
+func blockAgg(blockID, deviceModelID int64, plane models.NetworkPlane) *models.TierAggregation {
+	return &models.TierAggregation{
+		ScopeType:     models.ScopeBlock,
+		ScopeID:       blockID,
+		Plane:         plane,
+		DeviceModelID: deviceModelID,
+	}
+}
+
 // --- BlockService tests ---
 
 func TestBlockService_CreateBlock(t *testing.T) {
@@ -274,7 +300,7 @@ func TestBlockService_CreateBlock(t *testing.T) {
 			repo := newFakeBlockRepo()
 			svc := service.NewBlockService(repo)
 
-			b, err := svc.CreateBlock(1, tc.blockName, "")
+			result, err := svc.CreateBlock(1, tc.blockName, "", nil, nil, 0)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -287,14 +313,77 @@ func TestBlockService_CreateBlock(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if b.ID == 0 {
+			if result.Block.ID == 0 {
 				t.Error("expected non-zero block ID")
 			}
-			if b.SuperBlockID != 1 {
-				t.Errorf("expected super_block_id 1, got %d", b.SuperBlockID)
+			if result.Block.SuperBlockID != 1 {
+				t.Errorf("expected super_block_id 1, got %d", result.Block.SuperBlockID)
+			}
+			if len(result.Racks) != 0 {
+				t.Errorf("expected 0 racks without leaf model, got %d", len(result.Racks))
 			}
 		})
 	}
+}
+
+func TestBlockService_CreateBlockWithLeafModel(t *testing.T) {
+	repo := newFakeBlockRepo()
+	svc := service.NewBlockService(repo)
+
+	leafModel := repo.addDeviceModel(54)
+	leafModel.HeightU = 1
+	repo.deviceModels[leafModel.ID] = leafModel
+	leafID := leafModel.ID
+
+	t.Run("auto-creates 2 racks with 4 leaf devices", func(t *testing.T) {
+		result, err := svc.CreateBlock(1, "block-A", "", &leafID, nil, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result.Racks) != 2 {
+			t.Fatalf("expected 2 racks, got %d", len(result.Racks))
+		}
+
+		// Each rack should have 2 leaf devices.
+		totalLeaves := 0
+		for _, rack := range result.Racks {
+			devices, _ := repo.ListDevicesInRack(rack.ID)
+			for _, d := range devices {
+				if d.Role == models.DeviceRoleLeaf {
+					totalLeaves++
+				}
+			}
+		}
+		if totalLeaves != 4 {
+			t.Errorf("expected 4 leaf devices total, got %d", totalLeaves)
+		}
+	})
+
+	t.Run("with spine model distributes spines across racks", func(t *testing.T) {
+		spineModel := repo.addDeviceModel(36)
+		spineModel.HeightU = 1
+		repo.deviceModels[spineModel.ID] = spineModel
+		spineID := spineModel.ID
+
+		result, err := svc.CreateBlock(1, "block-B", "", &leafID, &spineID, 4)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// 4 spines distributed across 2 racks = 2 per rack.
+		for _, rack := range result.Racks {
+			devices, _ := repo.ListDevicesInRack(rack.ID)
+			spines := 0
+			for _, d := range devices {
+				if d.Role == models.DeviceRoleSpine {
+					spines++
+				}
+			}
+			if spines != 2 {
+				t.Errorf("rack %d: expected 2 spines, got %d", rack.ID, spines)
+			}
+		}
+	})
 }
 
 func TestBlockService_AssignAggregation(t *testing.T) {
@@ -308,7 +397,7 @@ func TestBlockService_AssignAggregation(t *testing.T) {
 	dm32 := repo.addDeviceModel(32)
 
 	t.Run("assign to block", func(t *testing.T) {
-		summary, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID)
+		summary, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -321,23 +410,24 @@ func TestBlockService_AssignAggregation(t *testing.T) {
 		if summary.AvailablePorts != 32 {
 			t.Errorf("expected available_ports 32, got %d", summary.AvailablePorts)
 		}
+		if summary.SpineCount != 2 {
+			t.Errorf("expected spine_count 2, got %d", summary.SpineCount)
+		}
 	})
 
 	t.Run("block not found", func(t *testing.T) {
-		_, err := svc.AssignAggregation(9999, models.NetworkPlaneFrontEnd, dm32.ID)
+		_, err := svc.AssignAggregation(9999, models.NetworkPlaneFrontEnd, dm32.ID, 0)
 		if !errors.Is(err, models.ErrNotFound) {
 			t.Errorf("expected ErrNotFound, got %v", err)
 		}
 	})
 
 	t.Run("downsize rejected when over-allocated", func(t *testing.T) {
-		// Pre-allocate some ports manually.
-		agg, _ := repo.GetAggregation(block.ID, models.NetworkPlaneFrontEnd)
+		agg, _ := repo.GetAggregation(models.ScopeBlock, block.ID, models.NetworkPlaneFrontEnd)
 		repo.AllocatePorts(agg.ID, 99, []string{"leaf-1", "leaf-2", "leaf-3"}, 0)
 
-		// Try to assign a smaller model with only 2 ports.
 		dm2 := repo.addDeviceModel(2)
-		_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm2.ID)
+		_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm2.ID, 0)
 		if !errors.Is(err, models.ErrAggModelDownsize) {
 			t.Errorf("expected ErrAggModelDownsize, got %v", err)
 		}
@@ -346,23 +436,23 @@ func TestBlockService_AssignAggregation(t *testing.T) {
 
 func TestBlockService_AddRackToBlock(t *testing.T) {
 	tests := []struct {
-		name          string
-		setup         func(repo *fakeBlockRepo) (rackID int64, blockID *int64, superBlockID int64)
-		wantConns     int
-		wantWarning   bool
-		wantErr       bool
-		wantErrType   error
+		name        string
+		setup       func(repo *fakeBlockRepo) (rackID int64, blockID *int64, superBlockID int64)
+		wantConns   int
+		wantWarning bool
+		wantErr     bool
+		wantErrType error
 	}{
 		{
-			name: "no leaf devices — success with no connections",
+			name: "no leaf devices with agg — auto-places leaves and connects",
 			setup: func(repo *fakeBlockRepo) (int64, *int64, int64) {
 				block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "b1"})
-				rack := repo.addRack(nil) // no devices
+				rack := repo.addRack(nil)
 				dm := repo.addDeviceModel(32)
-				repo.SetAggregation(&models.BlockAggregation{BlockID: block.ID, Plane: models.NetworkPlaneFrontEnd, DeviceModelID: dm.ID})
+				repo.SetAggregation(blockAgg(block.ID, dm.ID, models.NetworkPlaneFrontEnd))
 				return rack.ID, &block.ID, 0
 			},
-			wantConns:   0,
+			wantConns:   2,
 			wantWarning: false,
 		},
 		{
@@ -383,7 +473,7 @@ func TestBlockService_AddRackToBlock(t *testing.T) {
 				rack := repo.addRack(nil)
 				repo.addLeaf(rack.ID, "leaf-1")
 				dm := repo.addDeviceModel(32)
-				repo.SetAggregation(&models.BlockAggregation{BlockID: block.ID, Plane: models.NetworkPlaneFrontEnd, DeviceModelID: dm.ID})
+				repo.SetAggregation(blockAgg(block.ID, dm.ID, models.NetworkPlaneFrontEnd))
 				return rack.ID, &block.ID, 0
 			},
 			wantConns:   1,
@@ -397,12 +487,12 @@ func TestBlockService_AddRackToBlock(t *testing.T) {
 				repo.addLeaf(rack.ID, "leaf-1")
 				repo.addLeaf(rack.ID, "leaf-2")
 				dm := repo.addDeviceModel(32)
-				repo.SetAggregation(&models.BlockAggregation{BlockID: block.ID, Plane: models.NetworkPlaneFrontEnd, DeviceModelID: dm.ID})
+				repo.SetAggregation(blockAgg(block.ID, dm.ID, models.NetworkPlaneFrontEnd))
 				dm2 := repo.addDeviceModel(32)
-				repo.SetAggregation(&models.BlockAggregation{BlockID: block.ID, Plane: models.NetworkPlaneManagement, DeviceModelID: dm2.ID})
+				repo.SetAggregation(blockAgg(block.ID, dm2.ID, models.NetworkPlaneManagement))
 				return rack.ID, &block.ID, 0
 			},
-			wantConns:   4, // 2 leaves × 2 planes
+			wantConns:   4,
 			wantWarning: false,
 		},
 		{
@@ -411,9 +501,8 @@ func TestBlockService_AddRackToBlock(t *testing.T) {
 				block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 5, Name: "b5"})
 				rack := repo.addRack(nil)
 				repo.addLeaf(rack.ID, "leaf-1")
-				dm := repo.addDeviceModel(1) // only 1 port
-				agg, _ := repo.SetAggregation(&models.BlockAggregation{BlockID: block.ID, Plane: models.NetworkPlaneFrontEnd, DeviceModelID: dm.ID})
-				// Fill the only port.
+				dm := repo.addDeviceModel(1)
+				agg, _ := repo.SetAggregation(blockAgg(block.ID, dm.ID, models.NetworkPlaneFrontEnd))
 				repo.AllocatePorts(agg.ID, 888, []string{"existing-leaf"}, 0)
 				return rack.ID, &block.ID, 0
 			},
@@ -474,13 +563,12 @@ func TestBlockService_AddRackToBlock(t *testing.T) {
 }
 
 func TestBlockService_CapacityEnforcement(t *testing.T) {
-	// Table-driven capacity test: N-1, N, N+1 racks.
 	const portsPerAgg = 4
 
 	tests := []struct {
-		name       string
-		numRacks   int // racks with 1 leaf each
-		wantErr    bool
+		name    string
+		numRacks int
+		wantErr bool
 	}{
 		{"N-1 racks (capacity not full)", portsPerAgg - 1, false},
 		{"N racks (exactly full)", portsPerAgg, false},
@@ -494,9 +582,7 @@ func TestBlockService_CapacityEnforcement(t *testing.T) {
 
 			block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "cap-test"})
 			dm := repo.addDeviceModel(portsPerAgg)
-			repo.SetAggregation(&models.BlockAggregation{
-				BlockID: block.ID, Plane: models.NetworkPlaneFrontEnd, DeviceModelID: dm.ID,
-			})
+			repo.SetAggregation(blockAgg(block.ID, dm.ID, models.NetworkPlaneFrontEnd))
 
 			var lastErr error
 			for i := 0; i < tc.numRacks; i++ {
@@ -533,27 +619,23 @@ func TestBlockService_RemoveRackFromBlock(t *testing.T) {
 		rack := repo.addRack(&block.ID)
 		repo.addLeaf(rack.ID, "leaf-1")
 		dm := repo.addDeviceModel(32)
-		repo.SetAggregation(&models.BlockAggregation{BlockID: block.ID, Plane: models.NetworkPlaneFrontEnd, DeviceModelID: dm.ID})
+		repo.SetAggregation(blockAgg(block.ID, dm.ID, models.NetworkPlaneFrontEnd))
 
-		// Add rack to block first.
 		_, err := svc.AddRackToBlock(rack.ID, &block.ID, 0)
 		if err != nil {
 			t.Fatalf("add rack: %v", err)
 		}
 
-		// Check connections exist.
-		agg, _ := repo.GetAggregation(block.ID, models.NetworkPlaneFrontEnd)
+		agg, _ := repo.GetAggregation(models.ScopeBlock, block.ID, models.NetworkPlaneFrontEnd)
 		count, _ := repo.CountAllocatedPorts(agg.ID)
 		if count != 1 {
 			t.Fatalf("expected 1 connection before remove, got %d", count)
 		}
 
-		// Remove rack from block.
 		if err := svc.RemoveRackFromBlock(rack.ID); err != nil {
 			t.Fatalf("remove rack: %v", err)
 		}
 
-		// Connections should be gone.
 		count, _ = repo.CountAllocatedPorts(agg.ID)
 		if count != 0 {
 			t.Errorf("expected 0 connections after remove, got %d", count)
@@ -564,7 +646,7 @@ func TestBlockService_RemoveRackFromBlock(t *testing.T) {
 		repo := newFakeBlockRepo()
 		svc := service.NewBlockService(repo)
 
-		rack := repo.addRack(nil) // no block
+		rack := repo.addRack(nil)
 		err := svc.RemoveRackFromBlock(rack.ID)
 		if !errors.Is(err, models.ErrNotFound) {
 			t.Errorf("expected ErrNotFound, got %v", err)
@@ -585,13 +667,11 @@ func TestBlockService_DefaultBlock(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Rack should now have a block assigned.
 		updatedRack, _ := repo.GetRack(rack.ID)
 		if updatedRack.BlockID == nil {
 			t.Error("expected rack to have a block_id after placement")
 		}
 
-		// Default block should exist.
 		def, err := repo.GetDefaultBlock(superBlockID)
 		if err != nil {
 			t.Fatalf("GetDefaultBlock: %v", err)
@@ -637,25 +717,22 @@ func TestBlockService_AggregationDownsizeRejected(t *testing.T) {
 	block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "row-A"})
 	dm32 := repo.addDeviceModel(32)
 
-	_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID)
+	_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID, 0)
 	if err != nil {
 		t.Fatalf("initial assign: %v", err)
 	}
 
-	// Allocate 10 ports.
-	agg, _ := repo.GetAggregation(block.ID, models.NetworkPlaneFrontEnd)
+	agg, _ := repo.GetAggregation(models.ScopeBlock, block.ID, models.NetworkPlaneFrontEnd)
 	repo.AllocatePorts(agg.ID, 100, make([]string, 10), 0)
 
-	// Try to downsize to 8 ports — should fail.
 	dm8 := repo.addDeviceModel(8)
-	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm8.ID)
+	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm8.ID, 0)
 	if !errors.Is(err, models.ErrAggModelDownsize) {
 		t.Errorf("expected ErrAggModelDownsize, got %v", err)
 	}
 
-	// Resize to 12 ports — should succeed (10 allocated < 12).
 	dm12 := repo.addDeviceModel(12)
-	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm12.ID)
+	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm12.ID, 0)
 	if err != nil {
 		t.Errorf("expected success resizing to 12, got %v", err)
 	}

@@ -16,17 +16,17 @@ import (
 // --- fakeBlockService ---
 
 type fakeBlockService struct {
-	blocks   map[int64]*models.Block
-	aggs     map[string]*models.BlockAggregationSummary // key: "blockID:plane"
-	conns    map[string][]*models.PortConnection
-	nextID   int64
+	blocks map[int64]*models.Block
+	aggs   map[string]*models.TierAggregationSummary // key: "blockID:plane"
+	conns  map[string][]*models.TierPortConnection
+	nextID int64
 }
 
 func newFakeBlockSvc() *fakeBlockService {
 	return &fakeBlockService{
 		blocks: make(map[int64]*models.Block),
-		aggs:   make(map[string]*models.BlockAggregationSummary),
-		conns:  make(map[string][]*models.PortConnection),
+		aggs:   make(map[string]*models.TierAggregationSummary),
+		conns:  make(map[string][]*models.TierPortConnection),
 	}
 }
 
@@ -34,14 +34,14 @@ func (s *fakeBlockService) aggKey(blockID int64, plane models.NetworkPlane) stri
 	return fmt.Sprintf("%d:%s", blockID, plane)
 }
 
-func (s *fakeBlockService) CreateBlock(superBlockID int64, name, description string) (*models.Block, error) {
+func (s *fakeBlockService) CreateBlock(superBlockID int64, name, description string, leafModelID, spineModelID *int64, spineCount int) (*models.CreateBlockResult, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%w: block name is required", models.ErrConstraintViolation)
 	}
 	s.nextID++
 	b := &models.Block{ID: s.nextID, SuperBlockID: superBlockID, Name: name, Description: description}
 	s.blocks[b.ID] = b
-	return b, nil
+	return &models.CreateBlockResult{Block: b}, nil
 }
 
 func (s *fakeBlockService) GetBlock(id int64) (*models.Block, error) {
@@ -64,23 +64,29 @@ func (s *fakeBlockService) ListBlocks(superBlockID int64) ([]*models.Block, erro
 	return out, nil
 }
 
-func (s *fakeBlockService) AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64) (*models.BlockAggregationSummary, error) {
+func (s *fakeBlockService) AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error) {
 	if _, ok := s.blocks[blockID]; !ok {
 		return nil, models.ErrNotFound
 	}
 	if deviceModelID == 999 {
 		return nil, fmt.Errorf("%w: downsize not allowed", models.ErrAggModelDownsize)
 	}
-	summary := &models.BlockAggregationSummary{
-		BlockAggregation: models.BlockAggregation{BlockID: blockID, Plane: plane, DeviceModelID: deviceModelID},
-		TotalPorts:       32,
-		AvailablePorts:   32,
+	summary := &models.TierAggregationSummary{
+		TierAggregation: models.TierAggregation{
+			ScopeType:     models.ScopeBlock,
+			ScopeID:       blockID,
+			Plane:         plane,
+			DeviceModelID: deviceModelID,
+			SpineCount:    spineCount,
+		},
+		TotalPorts:     32,
+		AvailablePorts: 32,
 	}
 	s.aggs[s.aggKey(blockID, plane)] = summary
 	return summary, nil
 }
 
-func (s *fakeBlockService) GetAggregationSummary(blockID int64, plane models.NetworkPlane) (*models.BlockAggregationSummary, error) {
+func (s *fakeBlockService) GetAggregationSummary(blockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error) {
 	sum, ok := s.aggs[s.aggKey(blockID, plane)]
 	if !ok {
 		return nil, models.ErrNotFound
@@ -89,11 +95,10 @@ func (s *fakeBlockService) GetAggregationSummary(blockID int64, plane models.Net
 	return &cp, nil
 }
 
-func (s *fakeBlockService) ListAggregationSummaries(blockID int64) ([]*models.BlockAggregationSummary, error) {
-	var out []*models.BlockAggregationSummary
-	for k, sum := range s.aggs {
-		_ = k
-		if sum.BlockID == blockID {
+func (s *fakeBlockService) ListAggregationSummaries(blockID int64) ([]*models.TierAggregationSummary, error) {
+	var out []*models.TierAggregationSummary
+	for _, sum := range s.aggs {
+		if sum.ScopeID == blockID {
 			cp := *sum
 			out = append(out, &cp)
 		}
@@ -123,7 +128,7 @@ func (s *fakeBlockService) AddRackToBlock(rackID int64, blockID *int64, superBlo
 	}
 	return &models.AddRackToBlockResult{
 		Rack:        &models.Rack{ID: rackID, BlockID: &bid},
-		Connections: []*models.PortConnection{},
+		Connections: []*models.TierPortConnection{},
 	}, nil
 }
 
@@ -134,7 +139,7 @@ func (s *fakeBlockService) RemoveRackFromBlock(rackID int64) error {
 	return nil
 }
 
-func (s *fakeBlockService) ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.PortConnection, error) {
+func (s *fakeBlockService) ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.TierPortConnection, error) {
 	key := s.aggKey(blockID, plane)
 	if _, ok := s.aggs[key]; !ok {
 		return nil, models.ErrNotFound
@@ -179,10 +184,10 @@ func TestBlockHandler_CreateBlock(t *testing.T) {
 		if w.Code != http.StatusCreated {
 			t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
 		}
-		var b models.Block
-		json.NewDecoder(w.Body).Decode(&b)
-		if b.Name != "row-A" {
-			t.Errorf("expected name 'row-A', got %q", b.Name)
+		var result models.CreateBlockResult
+		json.NewDecoder(w.Body).Decode(&result)
+		if result.Block.Name != "row-A" {
+			t.Errorf("expected name 'row-A', got %q", result.Block.Name)
 		}
 	})
 
@@ -207,9 +212,7 @@ func TestBlockHandler_CreateBlock(t *testing.T) {
 func TestBlockHandler_GetBlock(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
-
-	// Create a block to fetch.
-	svc.CreateBlock(1, "row-A", "")
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
 
 	t.Run("found", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/api/blocks/1", nil)
@@ -242,9 +245,8 @@ func TestBlockHandler_GetBlock(t *testing.T) {
 func TestBlockHandler_ListBlocks(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
-
-	svc.CreateBlock(5, "row-A", "")
-	svc.CreateBlock(5, "row-B", "")
+	svc.CreateBlock(5, "row-A", "", nil, nil, 0)
+	svc.CreateBlock(5, "row-B", "", nil, nil, 0)
 
 	t.Run("valid super_block_id", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/api/blocks?super_block_id=5", nil)
@@ -271,10 +273,10 @@ func TestBlockHandler_ListBlocks(t *testing.T) {
 func TestBlockHandler_AssignAggregation(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
-	svc.CreateBlock(1, "row-A", "")
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
 
 	t.Run("valid assignment", func(t *testing.T) {
-		body := map[string]any{"device_model_id": 10}
+		body := map[string]any{"device_model_id": 10, "spine_count": 4}
 		r := blockRequest(t, "PUT", "/api/blocks/1/aggregations/front_end", body)
 		r.SetPathValue("id", "1")
 		r.SetPathValue("plane", "front_end")
@@ -296,7 +298,7 @@ func TestBlockHandler_AssignAggregation(t *testing.T) {
 	})
 
 	t.Run("downsize rejected", func(t *testing.T) {
-		body := map[string]any{"device_model_id": 999} // triggers ErrAggModelDownsize in fake
+		body := map[string]any{"device_model_id": 999}
 		r := blockRequest(t, "PUT", "/api/blocks/1/aggregations/front_end", body)
 		r.SetPathValue("id", "1")
 		r.SetPathValue("plane", "front_end")
@@ -321,8 +323,8 @@ func TestBlockHandler_AssignAggregation(t *testing.T) {
 func TestBlockHandler_GetAggregation(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
-	svc.CreateBlock(1, "row-A", "")
-	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10)
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
+	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0)
 
 	t.Run("found", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/front_end", nil)
@@ -348,8 +350,8 @@ func TestBlockHandler_GetAggregation(t *testing.T) {
 func TestBlockHandler_DeleteAggregation(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
-	svc.CreateBlock(1, "row-A", "")
-	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10)
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
+	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0)
 
 	t.Run("deletes successfully", func(t *testing.T) {
 		r := httptest.NewRequest("DELETE", "/api/blocks/1/aggregations/front_end", nil)
@@ -375,7 +377,7 @@ func TestBlockHandler_DeleteAggregation(t *testing.T) {
 func TestBlockHandler_AddRackToBlock(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
-	svc.CreateBlock(1, "row-A", "")
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
 
 	t.Run("valid placement with block_id", func(t *testing.T) {
 		body := map[string]any{"rack_id": 5, "block_id": 1}
@@ -387,7 +389,7 @@ func TestBlockHandler_AddRackToBlock(t *testing.T) {
 	})
 
 	t.Run("agg ports full", func(t *testing.T) {
-		body := map[string]any{"rack_id": 999, "block_id": 1} // rackID=999 triggers ErrAggPortsFull
+		body := map[string]any{"rack_id": 999, "block_id": 1}
 		r := blockRequest(t, "POST", "/api/blocks/add-rack", body)
 		w := blockResponse(t, http.HandlerFunc(h.AddRackToBlock), r)
 		if w.Code != http.StatusUnprocessableEntity {
@@ -396,7 +398,7 @@ func TestBlockHandler_AddRackToBlock(t *testing.T) {
 	})
 
 	t.Run("missing rack_id", func(t *testing.T) {
-		body := map[string]any{"block_id": 1} // rack_id defaults to 0
+		body := map[string]any{"block_id": 1}
 		r := blockRequest(t, "POST", "/api/blocks/add-rack", body)
 		w := blockResponse(t, http.HandlerFunc(h.AddRackToBlock), r)
 		if w.Code != http.StatusBadRequest {
@@ -440,8 +442,8 @@ func TestBlockHandler_RemoveRackFromBlock(t *testing.T) {
 func TestBlockHandler_ListPortConnections(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
-	svc.CreateBlock(1, "row-A", "")
-	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10)
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
+	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0)
 
 	t.Run("returns empty list", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/front_end/connections", nil)
@@ -451,7 +453,7 @@ func TestBlockHandler_ListPortConnections(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
 		}
-		var conns []*models.PortConnection
+		var conns []*models.TierPortConnection
 		json.NewDecoder(w.Body).Decode(&conns)
 		if conns == nil {
 			t.Error("expected non-nil connections slice")

@@ -41,7 +41,7 @@ type RackRepository interface {
 // ManagementPortAllocator is the interface for management port allocation,
 // used by RackService to enforce management agg port capacity when placing management_tor devices.
 type ManagementPortAllocator interface {
-	AllocateManagementPort(blockID int64) (*models.BlockAggregation, string, error)
+	AllocateManagementPort(blockID int64) (*models.TierAggregation, string, error)
 }
 
 // RackService implements business logic for rack types, racks, and device placement.
