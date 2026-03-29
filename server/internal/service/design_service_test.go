@@ -7,6 +7,7 @@ import (
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
 	"github.com/rnwolfe/fabrik/server/internal/service"
+	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
 // fakeDesignRepo is an in-memory implementation of DesignRepository for tests.
@@ -51,6 +52,10 @@ func (r *fakeDesignRepo) Delete(id int64) error {
 	}
 	delete(r.designs, id)
 	return nil
+}
+
+func (r *fakeDesignRepo) GetOrCreateScaffold(designID int64) (*store.DesignScaffold, error) {
+	return &store.DesignScaffold{SiteID: 1, SuperBlockID: 1}, nil
 }
 
 func TestDesignService_CreateDesign(t *testing.T) {

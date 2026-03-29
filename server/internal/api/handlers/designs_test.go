@@ -11,6 +11,7 @@ import (
 
 	"github.com/rnwolfe/fabrik/server/internal/api/handlers"
 	"github.com/rnwolfe/fabrik/server/internal/models"
+	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
 // fakeDesignService is an in-memory implementation of DesignService for tests.
@@ -57,6 +58,13 @@ func (s *fakeDesignService) DeleteDesign(id int64) error {
 	}
 	delete(s.designs, id)
 	return nil
+}
+
+func (s *fakeDesignService) GetScaffold(designID int64) (*store.DesignScaffold, error) {
+	if _, ok := s.designs[designID]; !ok {
+		return nil, models.ErrNotFound
+	}
+	return &store.DesignScaffold{SiteID: 1, SuperBlockID: 1}, nil
 }
 
 func TestDesignHandler_Create(t *testing.T) {

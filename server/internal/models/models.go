@@ -187,8 +187,22 @@ type DeviceModel struct {
 	ArchivedAt      *time.Time `json:"archived_at"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
+	// PortGroups describes the physical port sets available on this device.
+	// Populated by a separate query; not stored inline in the device_models table.
+	PortGroups      []PortGroup `json:"port_groups,omitempty"`
 }
 
+// PortGroup describes a homogeneous set of ports on a device model
+// (e.g., "48 ports at 25 Gbps"). Uplink/downlink role is determined by
+// the fabric context, not the device model itself.
+type PortGroup struct {
+	ID            int64     `json:"id"`
+	DeviceModelID int64     `json:"device_model_id"`
+	Count         int       `json:"count"`
+	SpeedGbps     int       `json:"speed_gbps"`
+	Label         string    `json:"label"`
+	CreatedAt     time.Time `json:"created_at"`
+}
 
 // CapacityLevel enumerates the hierarchy level at which capacity is requested.
 type CapacityLevel string

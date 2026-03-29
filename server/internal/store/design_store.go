@@ -78,6 +78,46 @@ func (s *DesignStore) Get(id int64) (*models.Design, error) {
 	return d, nil
 }
 
+// DesignScaffold holds the auto-created default site and super-block IDs for a design.
+type DesignScaffold struct {
+	SiteID       int64 `json:"site_id"`
+	SuperBlockID int64 `json:"super_block_id"`
+}
+
+// GetOrCreateScaffold returns the default site and super-block for a design,
+// creating them if they don't already exist.
+func (s *DesignStore) GetOrCreateScaffold(designID int64) (*DesignScaffold, error) {
+	// Try to find existing site for this design.
+	var siteID int64
+	err := s.db.QueryRow(`SELECT id FROM sites WHERE design_id = ? ORDER BY id LIMIT 1`, designID).Scan(&siteID)
+	if err != nil {
+		// No site exists — create one.
+		err = s.db.QueryRow(
+			`INSERT INTO sites (design_id, name, description) VALUES (?, 'Default Site', '') RETURNING id`,
+			designID,
+		).Scan(&siteID)
+		if err != nil {
+			return nil, fmt.Errorf("create default site: %w", err)
+		}
+	}
+
+	// Try to find existing super-block for this site.
+	var superBlockID int64
+	err = s.db.QueryRow(`SELECT id FROM super_blocks WHERE site_id = ? ORDER BY id LIMIT 1`, siteID).Scan(&superBlockID)
+	if err != nil {
+		// No super-block exists — create one.
+		err = s.db.QueryRow(
+			`INSERT INTO super_blocks (site_id, name, description) VALUES (?, 'Default Pod', '') RETURNING id`,
+			siteID,
+		).Scan(&superBlockID)
+		if err != nil {
+			return nil, fmt.Errorf("create default super-block: %w", err)
+		}
+	}
+
+	return &DesignScaffold{SiteID: siteID, SuperBlockID: superBlockID}, nil
+}
+
 // Delete removes the Design with the given id. Returns models.ErrNotFound if it
 // does not exist.
 func (s *DesignStore) Delete(id int64) error {

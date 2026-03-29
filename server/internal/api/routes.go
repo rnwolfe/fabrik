@@ -14,6 +14,7 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("GET /api/designs", designs.List)
 	mux.HandleFunc("GET /api/designs/{id}", designs.Get)
 	mux.HandleFunc("DELETE /api/designs/{id}", designs.Delete)
+	mux.HandleFunc("GET /api/designs/{id}/scaffold", designs.Scaffold)
 
 	mux.HandleFunc("POST /api/catalog/devices", deviceModels.Create)
 	mux.HandleFunc("GET /api/catalog/devices", deviceModels.List)
@@ -61,7 +62,7 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("GET /api/blocks/{id}/aggregations/{plane}/connections", blocks.ListPortConnections)
 
 	mux.HandleFunc("POST /api/blocks/add-rack", blocks.AddRackToBlock)
-	mux.HandleFunc("DELETE /api/blocks/racks/{rack_id}", blocks.RemoveRackFromBlock)
+	mux.HandleFunc("DELETE /api/block-racks/{rack_id}", blocks.RemoveRackFromBlock)
 
 	mux.HandleFunc("PUT /api/blocks/{block_id}/management-agg", management.SetManagementAgg)
 	mux.HandleFunc("GET /api/blocks/{block_id}/management-agg", management.GetManagementAgg)

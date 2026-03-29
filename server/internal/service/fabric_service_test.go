@@ -335,7 +335,7 @@ func TestFabricService_DeleteFabric(t *testing.T) {
 func TestFabricService_PreviewTopology_Service(t *testing.T) {
 	svc := service.NewFabricService(newInMemFabricRepo())
 
-	plan, err := svc.PreviewTopology(2, 64, 1.0)
+	plan, err := svc.PreviewTopology(service.PreviewTopologyRequest{Stages: 2, Radix: 64, Oversubscription: 1.0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestFabricService_PreviewTopology_Service(t *testing.T) {
 	}
 
 	// Invalid params should return error.
-	_, err = svc.PreviewTopology(4, 64, 1.0)
+	_, err = svc.PreviewTopology(service.PreviewTopologyRequest{Stages: 4, Radix: 64, Oversubscription: 1.0})
 	if err == nil {
 		t.Fatal("expected error for invalid stages")
 	}

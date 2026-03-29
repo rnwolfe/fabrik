@@ -29,6 +29,13 @@ func NewDeviceModelHandler(svc DeviceModelService) *DeviceModelHandler {
 	return &DeviceModelHandler{svc: svc}
 }
 
+// portGroupRequest is a port group entry in create/update requests.
+type portGroupRequest struct {
+	Count     int    `json:"count"`
+	SpeedGbps int    `json:"speed_gbps"`
+	Label     string `json:"label"`
+}
+
 // createDeviceModelRequest is the JSON body for POST /api/catalog/devices.
 type createDeviceModelRequest struct {
 	Vendor            string                  `json:"vendor"`
@@ -45,6 +52,7 @@ type createDeviceModelRequest struct {
 	StorageTB         float64                 `json:"storage_tb"`
 	GPUCount          int                     `json:"gpu_count"`
 	Description       string                  `json:"description"`
+	PortGroups        []portGroupRequest      `json:"port_groups"`
 }
 
 // Create handles POST /api/catalog/devices.
@@ -77,6 +85,7 @@ func (h *DeviceModelHandler) Create(w http.ResponseWriter, r *http.Request) {
 		StorageTB:         req.StorageTB,
 		GPUCount:          req.GPUCount,
 		Description:       req.Description,
+		PortGroups:        toPortGroups(req.PortGroups),
 	}
 
 	out, err := h.svc.CreateDeviceModel(dm)
@@ -150,6 +159,7 @@ type updateDeviceModelRequest struct {
 	StorageTB         float64                 `json:"storage_tb"`
 	GPUCount          int                     `json:"gpu_count"`
 	Description       string                  `json:"description"`
+	PortGroups        []portGroupRequest      `json:"port_groups"`
 }
 
 // Update handles PUT /api/catalog/devices/:id.
@@ -188,6 +198,7 @@ func (h *DeviceModelHandler) Update(w http.ResponseWriter, r *http.Request) {
 		StorageTB:         req.StorageTB,
 		GPUCount:          req.GPUCount,
 		Description:       req.Description,
+		PortGroups:        toPortGroups(req.PortGroups),
 	}
 
 	out, err := h.svc.UpdateDeviceModel(dm)
@@ -238,6 +249,22 @@ func (h *DeviceModelHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// toPortGroups converts request port groups to model port groups.
+func toPortGroups(reqs []portGroupRequest) []models.PortGroup {
+	if len(reqs) == 0 {
+		return nil
+	}
+	out := make([]models.PortGroup, len(reqs))
+	for i, r := range reqs {
+		out[i] = models.PortGroup{
+			Count:     r.Count,
+			SpeedGbps: r.SpeedGbps,
+			Label:     r.Label,
+		}
+	}
+	return out
 }
 
 // Duplicate handles POST /api/catalog/devices/:id/duplicate.

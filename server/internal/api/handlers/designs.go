@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
+	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
 // DesignService is the business logic interface required by DesignHandler.
@@ -18,6 +19,7 @@ type DesignService interface {
 	ListDesigns() ([]*models.Design, error)
 	GetDesign(id int64) (*models.Design, error)
 	DeleteDesign(id int64) error
+	GetScaffold(designID int64) (*store.DesignScaffold, error)
 }
 
 // DesignHandler handles HTTP requests for Design resources.
@@ -119,6 +121,28 @@ func (h *DesignHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Scaffold handles GET /api/designs/{id}/scaffold — returns (or creates) the
+// default site and super-block for a design.
+func (h *DesignHandler) Scaffold(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	scaffold, err := h.svc.GetScaffold(id)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "design not found")
+			return
+		}
+		slog.Error("scaffold design", "err", err, "designID", id)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, scaffold)
 }
 
 // --- helpers ---

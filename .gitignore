@@ -40,3 +40,4 @@ playwright-report/
 *.db-journal
 *.db-wal
 *.db-shm
+tmp/

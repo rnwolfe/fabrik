@@ -115,6 +115,16 @@ func (s *DeviceModelStore) List(includeArchived bool) ([]*models.DeviceModel, er
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate device models: %w", err)
 	}
+
+	// Bulk-load port groups and attach to models.
+	pgMap, err := s.ListAllPortGroups()
+	if err != nil {
+		return nil, fmt.Errorf("load port groups: %w", err)
+	}
+	for _, dm := range out {
+		dm.PortGroups = pgMap[dm.ID]
+	}
+
 	return out, nil
 }
 
@@ -135,6 +145,10 @@ func (s *DeviceModelStore) Get(id int64) (*models.DeviceModel, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get device model %d: %w", id, err)
+	}
+	dm.PortGroups, err = s.ListPortGroups(id)
+	if err != nil {
+		return nil, fmt.Errorf("load port groups for model %d: %w", id, err)
 	}
 	return dm, nil
 }
@@ -250,6 +264,103 @@ func (s *DeviceModelStore) Duplicate(sourceID int64, newVendor, newModel string)
 	out, err := s.Create(copy)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate device model %d: %w", sourceID, err)
+	}
+
+	// Copy port groups from source.
+	if len(src.PortGroups) > 0 {
+		out.PortGroups, err = s.SetPortGroups(out.ID, src.PortGroups)
+		if err != nil {
+			return nil, fmt.Errorf("copy port groups for model %d: %w", sourceID, err)
+		}
+	}
+
+	return out, nil
+}
+
+// --- Port Group operations ---
+
+// ListPortGroups returns all port groups for the given device model.
+func (s *DeviceModelStore) ListPortGroups(deviceModelID int64) ([]models.PortGroup, error) {
+	const q = `
+		SELECT id, device_model_id, count, speed_gbps, label, created_at
+		FROM device_model_port_groups
+		WHERE device_model_id = ?
+		ORDER BY speed_gbps, count`
+
+	rows, err := s.db.Query(q, deviceModelID)
+	if err != nil {
+		return nil, fmt.Errorf("list port groups for model %d: %w", deviceModelID, err)
+	}
+	defer rows.Close()
+
+	var out []models.PortGroup
+	for rows.Next() {
+		var pg models.PortGroup
+		if err := rows.Scan(&pg.ID, &pg.DeviceModelID, &pg.Count, &pg.SpeedGbps, &pg.Label, &pg.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan port group: %w", err)
+		}
+		out = append(out, pg)
+	}
+	return out, rows.Err()
+}
+
+// ListAllPortGroups returns port groups for all device models, keyed by device_model_id.
+func (s *DeviceModelStore) ListAllPortGroups() (map[int64][]models.PortGroup, error) {
+	const q = `
+		SELECT id, device_model_id, count, speed_gbps, label, created_at
+		FROM device_model_port_groups
+		ORDER BY device_model_id, speed_gbps, count`
+
+	rows, err := s.db.Query(q)
+	if err != nil {
+		return nil, fmt.Errorf("list all port groups: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int64][]models.PortGroup)
+	for rows.Next() {
+		var pg models.PortGroup
+		if err := rows.Scan(&pg.ID, &pg.DeviceModelID, &pg.Count, &pg.SpeedGbps, &pg.Label, &pg.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan port group: %w", err)
+		}
+		out[pg.DeviceModelID] = append(out[pg.DeviceModelID], pg)
+	}
+	return out, rows.Err()
+}
+
+// SetPortGroups replaces all port groups for a device model with the given set.
+func (s *DeviceModelStore) SetPortGroups(deviceModelID int64, groups []models.PortGroup) ([]models.PortGroup, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	// Delete existing groups.
+	if _, err := tx.Exec("DELETE FROM device_model_port_groups WHERE device_model_id = ?", deviceModelID); err != nil {
+		return nil, fmt.Errorf("delete existing port groups: %w", err)
+	}
+
+	// Insert new groups.
+	const ins = `
+		INSERT INTO device_model_port_groups (device_model_id, count, speed_gbps, label)
+		VALUES (?, ?, ?, ?)
+		RETURNING id, device_model_id, count, speed_gbps, label, created_at`
+
+	var out []models.PortGroup
+	for _, g := range groups {
+		var pg models.PortGroup
+		err := tx.QueryRow(ins, deviceModelID, g.Count, g.SpeedGbps, g.Label).Scan(
+			&pg.ID, &pg.DeviceModelID, &pg.Count, &pg.SpeedGbps, &pg.Label, &pg.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert port group: %w", err)
+		}
+		out = append(out, pg)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit port groups: %w", err)
 	}
 	return out, nil
 }
