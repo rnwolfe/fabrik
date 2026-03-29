@@ -25,51 +25,67 @@ type FabricRepository interface {
 // It bundles the FabricRecord with the calculated topology and derived metrics.
 type FabricResponse struct {
 	*store.FabricRecord
-	Topology *TopologyPlan    `json:"topology"`
-	Warnings []string         `json:"warnings,omitempty"`
-	Metrics  *FabricMetrics   `json:"metrics"`
+	Topology *TopologyPlan  `json:"topology"`
+	Warnings []string       `json:"warnings,omitempty"`
+	Metrics  *FabricMetrics `json:"metrics"`
 	// Resolved device model objects for the UI.
 	LeafModel       *models.DeviceModel `json:"leaf_model,omitempty"`
 	SpineModel      *models.DeviceModel `json:"spine_model,omitempty"`
 	SuperSpineModel *models.DeviceModel `json:"super_spine_model,omitempty"`
 }
 
-// FabricMetrics holds derived metrics for a fabric.
+// FabricMetrics holds derived oversubscription metrics for a fabric.
 type FabricMetrics struct {
-	TotalSwitches      int     `json:"total_switches"`
-	TotalHostPorts     int     `json:"total_host_ports"`
-	OversubscriptionRatio float64 `json:"oversubscription_ratio"`
-	// BisectionBandwidthGbps is populated when a device model is assigned to the leaf role.
-	BisectionBandwidthGbps float64 `json:"bisection_bandwidth_gbps,omitempty"`
+	// LeafSpineOversubscription is the downlink:uplink ratio at the leaf-spine boundary.
+	LeafSpineOversubscription float64 `json:"leaf_spine_oversubscription"`
+	// SpineSuperSpineOversubscription is the ratio at the spine-to-super-spine boundary
+	// (only present for 3-stage and 5-stage fabrics).
+	SpineSuperSpineOversubscription *float64 `json:"spine_super_spine_oversubscription,omitempty"`
 }
 
 // CreateFabricRequest holds the inputs for creating a fabric.
 type CreateFabricRequest struct {
-	DesignID         int64              `json:"design_id"`
-	Name             string             `json:"name"`
-	Tier             models.FabricTier  `json:"tier"`
-	Stages           int                `json:"stages"`
-	Radix            int                `json:"radix"`
-	Oversubscription float64            `json:"oversubscription"`
-	Description      string             `json:"description"`
-	LeafModelID      int64              `json:"leaf_model_id,omitempty"`
-	SpineModelID     int64              `json:"spine_model_id,omitempty"`
-	SuperSpineModelID int64             `json:"super_spine_model_id,omitempty"`
+	DesignID         int64             `json:"design_id"`
+	Name             string            `json:"name"`
+	Tier             models.FabricTier `json:"tier"`
+	Stages           int               `json:"stages"`
+	Radix            int               `json:"radix"`
+	Oversubscription float64           `json:"oversubscription"`
+	// LeafCount is the number of leaf switches to include. 0 means full fabric
+	// (populate all spine ports); 1 means minimum viable (single leaf).
+	LeafCount         int   `json:"leaf_count,omitempty"`
+	Description       string `json:"description"`
+	LeafModelID       int64 `json:"leaf_model_id,omitempty"`
+	SpineModelID      int64 `json:"spine_model_id,omitempty"`
+	SuperSpineModelID int64 `json:"super_spine_model_id,omitempty"`
 }
 
 // UpdateFabricRequest holds the inputs for updating a fabric.
 type UpdateFabricRequest struct {
-	Name              string            `json:"name"`
-	Tier              models.FabricTier `json:"tier"`
-	Stages            int               `json:"stages"`
-	Radix             int               `json:"radix"`
-	Oversubscription  float64           `json:"oversubscription"`
-	Description       string            `json:"description"`
-	LeafModelID       int64             `json:"leaf_model_id,omitempty"`
-	SpineModelID      int64             `json:"spine_model_id,omitempty"`
-	SuperSpineModelID int64             `json:"super_spine_model_id,omitempty"`
+	Name             string            `json:"name"`
+	Tier             models.FabricTier `json:"tier"`
+	Stages           int               `json:"stages"`
+	Radix            int               `json:"radix"`
+	Oversubscription float64           `json:"oversubscription"`
+	// LeafCount is the number of leaf switches to include. 0 means full fabric;
+	// 1 means minimum viable.
+	LeafCount         int   `json:"leaf_count,omitempty"`
+	Description       string `json:"description"`
+	LeafModelID       int64 `json:"leaf_model_id,omitempty"`
+	SpineModelID      int64 `json:"spine_model_id,omitempty"`
+	SuperSpineModelID int64 `json:"super_spine_model_id,omitempty"`
 	// Force regeneration even if rack placements exist.
 	Force bool `json:"force"`
+}
+
+// PreviewTopologyRequest holds parameters for a topology preview (no persistence).
+type PreviewTopologyRequest struct {
+	Stages           int     `json:"stages"`
+	Radix            int     `json:"radix"`
+	Oversubscription float64 `json:"oversubscription"`
+	LeafCount        int     `json:"leaf_count,omitempty"`
+	LeafModelID      int64   `json:"leaf_model_id,omitempty"`
+	SpineModelID     int64   `json:"spine_model_id,omitempty"`
 }
 
 // FabricService implements business logic for Fabric resources.
@@ -88,7 +104,15 @@ func (s *FabricService) CreateFabric(req CreateFabricRequest) (*FabricResponse, 
 		return nil, err
 	}
 
-	topology, err := CalculateTopology(req.Stages, req.Radix, req.Oversubscription)
+	hints, err := s.buildHints(req.LeafModelID, req.SpineModelID, req.Radix, req.LeafCount)
+	if err != nil {
+		return nil, err
+	}
+
+	topology, err := CalculateTopology(req.Stages, hints.leafRadix, req.Oversubscription, &TopologyHints{
+		SpineRadix: hints.spineRadix,
+		LeafCount:  req.LeafCount,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", models.ErrConstraintViolation, err.Error())
 	}
@@ -98,7 +122,7 @@ func (s *FabricService) CreateFabric(req CreateFabricRequest) (*FabricResponse, 
 		Name:              strings.TrimSpace(req.Name),
 		Tier:              req.Tier,
 		Stages:            req.Stages,
-		Radix:             topology.Radix, // use corrected radix
+		Radix:             topology.Radix, // use corrected leaf radix
 		Oversubscription:  topology.Oversubscription,
 		Description:       req.Description,
 		LeafModelID:       req.LeafModelID,
@@ -111,7 +135,8 @@ func (s *FabricService) CreateFabric(req CreateFabricRequest) (*FabricResponse, 
 		return nil, fmt.Errorf("create fabric: %w", err)
 	}
 
-	slog.Info("fabric created", "fabricID", rec.ID, "name", rec.Name, "stages", req.Stages)
+	slog.Info("fabric created", "fabricID", rec.ID, "name", rec.Name, "stages", req.Stages,
+		"leafCount", topology.LeafCount, "spineCount", topology.SpineCount)
 
 	return s.buildResponse(rec, topology)
 }
@@ -125,9 +150,14 @@ func (s *FabricService) ListFabrics() ([]*FabricResponse, error) {
 
 	out := make([]*FabricResponse, 0, len(recs))
 	for _, rec := range recs {
-		topo, err := CalculateTopology(rec.Stages, rec.Radix, rec.Oversubscription)
+		hints, err := s.buildHintsFromRecord(rec)
 		if err != nil {
-			// Stored params should always be valid, but handle gracefully.
+			slog.Warn("resolve device models for fabric failed", "fabricID", rec.ID, "err", err)
+		}
+		topo, err := CalculateTopology(rec.Stages, hints.leafRadix, rec.Oversubscription, &TopologyHints{
+			SpineRadix: hints.spineRadix,
+		})
+		if err != nil {
 			slog.Warn("topology calculation for existing fabric failed", "fabricID", rec.ID, "err", err)
 			continue
 		}
@@ -147,7 +177,13 @@ func (s *FabricService) GetFabric(id int64) (*FabricResponse, error) {
 		return nil, fmt.Errorf("get fabric %d: %w", id, err)
 	}
 
-	topo, err := CalculateTopology(rec.Stages, rec.Radix, rec.Oversubscription)
+	hints, err := s.buildHintsFromRecord(rec)
+	if err != nil {
+		slog.Warn("resolve device models for fabric", "fabricID", id, "err", err)
+	}
+	topo, err := CalculateTopology(rec.Stages, hints.leafRadix, rec.Oversubscription, &TopologyHints{
+		SpineRadix: hints.spineRadix,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("calculate topology for fabric %d: %w", id, err)
 	}
@@ -161,7 +197,15 @@ func (s *FabricService) UpdateFabric(id int64, req UpdateFabricRequest) (*Fabric
 		return nil, err
 	}
 
-	topology, err := CalculateTopology(req.Stages, req.Radix, req.Oversubscription)
+	hints, err := s.buildHints(req.LeafModelID, req.SpineModelID, req.Radix, req.LeafCount)
+	if err != nil {
+		return nil, err
+	}
+
+	topology, err := CalculateTopology(req.Stages, hints.leafRadix, req.Oversubscription, &TopologyHints{
+		SpineRadix: hints.spineRadix,
+		LeafCount:  req.LeafCount,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", models.ErrConstraintViolation, err.Error())
 	}
@@ -206,8 +250,15 @@ func (s *FabricService) ListDeviceModels() ([]*models.DeviceModel, error) {
 }
 
 // PreviewTopology calculates topology without persisting, for live preview.
-func (s *FabricService) PreviewTopology(stages int, radix int, oversubscription float64) (*TopologyPlan, error) {
-	topo, err := CalculateTopology(stages, radix, oversubscription)
+func (s *FabricService) PreviewTopology(req PreviewTopologyRequest) (*TopologyPlan, error) {
+	hints, err := s.buildHints(req.LeafModelID, req.SpineModelID, req.Radix, req.LeafCount)
+	if err != nil {
+		return nil, err
+	}
+	topo, err := CalculateTopology(req.Stages, hints.leafRadix, req.Oversubscription, &TopologyHints{
+		SpineRadix: hints.spineRadix,
+		LeafCount:  req.LeafCount,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", models.ErrConstraintViolation, err.Error())
 	}
@@ -215,6 +266,59 @@ func (s *FabricService) PreviewTopology(stages int, radix int, oversubscription 
 }
 
 // --- helpers ---
+
+// radixHints holds resolved leaf and spine radix values for topology calculation.
+type radixHints struct {
+	leafRadix  int
+	spineRadix int
+	// leafPortGroups holds the port groups from the leaf device model, if any.
+	// The fabric/block context decides which group is uplink vs downlink.
+	leafPortGroups []models.PortGroup
+}
+
+// buildHints resolves leaf and spine radix from device model IDs (when provided).
+// fallbackRadix is used when no leaf model is assigned.
+func (s *FabricService) buildHints(leafModelID, spineModelID int64, fallbackRadix, leafCount int) (radixHints, error) {
+	h := radixHints{
+		leafRadix:  fallbackRadix,
+		spineRadix: 0, // 0 → topology_calc falls back to leafRadix
+	}
+	if leafModelID > 0 {
+		dm, err := s.repo.GetDeviceModelByID(leafModelID)
+		if err != nil && !isNotFound(err) {
+			return h, fmt.Errorf("resolve leaf model: %w", err)
+		}
+		if err == nil && dm.PortCount > 0 {
+			h.leafRadix = dm.PortCount
+		}
+		if err == nil {
+			h.leafPortGroups = dm.PortGroups
+		}
+	}
+	if spineModelID > 0 {
+		dm, err := s.repo.GetDeviceModelByID(spineModelID)
+		if err != nil && !isNotFound(err) {
+			return h, fmt.Errorf("resolve spine model: %w", err)
+		}
+		if err == nil && dm.PortCount > 0 {
+			h.spineRadix = dm.PortCount
+		}
+	}
+	return h, nil
+}
+
+// buildHintsFromRecord resolves radix hints from an existing FabricRecord.
+func (s *FabricService) buildHintsFromRecord(rec *store.FabricRecord) (radixHints, error) {
+	leafModelID := int64(0)
+	spineModelID := int64(0)
+	if rec.LeafModelID != nil {
+		leafModelID = *rec.LeafModelID
+	}
+	if rec.SpineModelID != nil {
+		spineModelID = *rec.SpineModelID
+	}
+	return s.buildHints(leafModelID, spineModelID, rec.Radix, 0)
+}
 
 func validateFabricInput(name string, stages int, radix int, oversubscription float64, tier models.FabricTier) error {
 	name = strings.TrimSpace(name)
@@ -237,24 +341,27 @@ func validateFabricInput(name string, stages int, radix int, oversubscription fl
 }
 
 // buildResponse constructs a FabricResponse from a record and topology plan.
-// It optionally resolves device model details.
 func (s *FabricService) buildResponse(rec *store.FabricRecord, topo *TopologyPlan) (*FabricResponse, error) {
+	metrics := &FabricMetrics{
+		LeafSpineOversubscription: topo.Oversubscription,
+	}
+	if topo.Stages >= 3 && topo.SuperSpineCount > 0 {
+		ratio := topo.Oversubscription
+		metrics.SpineSuperSpineOversubscription = &ratio
+	}
+
 	resp := &FabricResponse{
 		FabricRecord: rec,
 		Topology:     topo,
-		Metrics: &FabricMetrics{
-			TotalSwitches:         topo.TotalSwitches,
-			TotalHostPorts:        topo.TotalHostPorts,
-			OversubscriptionRatio: topo.Oversubscription,
-		},
+		Metrics:      metrics,
 	}
 
-	// Collect warnings.
 	if topo.RadixCorrectionNote != "" {
 		resp.Warnings = append(resp.Warnings, topo.RadixCorrectionNote)
 	}
 
-	// Resolve device model assignments.
+	// Resolve device model assignments (models already looked up for topology;
+	// re-fetch here for the response payload).
 	if rec.LeafModelID != nil {
 		dm, err := s.repo.GetDeviceModelByID(*rec.LeafModelID)
 		if err != nil && !isNotFound(err) {
@@ -262,12 +369,6 @@ func (s *FabricService) buildResponse(rec *store.FabricRecord, topo *TopologyPla
 		}
 		if err == nil {
 			resp.LeafModel = dm
-			// Calculate bisection bandwidth: (leafUplinks * portSpeed * leafCount) / 2.
-			// Speed is per-port; DeviceModel doesn't store per-port speed, only port_count.
-			// We approximate: if model is assigned, total uplink capacity is proportional.
-			// BisectionBW = uplinks / radix * totalPorts * portSpeed, but portSpeed unknown.
-			// Leave as a feature note; set a placeholder if port speed were known.
-			_ = dm
 		}
 	}
 	if rec.SpineModelID != nil {

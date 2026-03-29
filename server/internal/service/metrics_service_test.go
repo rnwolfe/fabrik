@@ -243,9 +243,9 @@ func TestMetricsService_GetDesignMetrics_portUtilization(t *testing.T) {
 	if leafEntry == nil {
 		t.Fatal("expected a leaf tier port utilization entry")
 	}
-	// leafCount=1, radix=32 → total = 1*32 = 32
-	if leafEntry.TotalPorts != 32 {
-		t.Errorf("expected leaf total ports=32, got %d", leafEntry.TotalPorts)
+	// full fabric: leafCount=32, radix=32 → total = 32*32 = 1024
+	if leafEntry.TotalPorts != 1024 {
+		t.Errorf("expected leaf total ports=1024, got %d", leafEntry.TotalPorts)
 	}
 }
 

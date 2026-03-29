@@ -17,6 +17,7 @@ type DeviceModelRepository interface {
 	Update(dm *models.DeviceModel) (*models.DeviceModel, error)
 	Archive(id int64) error
 	Duplicate(sourceID int64, newVendor, newModel string) (*models.DeviceModel, error)
+	SetPortGroups(deviceModelID int64, groups []models.PortGroup) ([]models.PortGroup, error)
 }
 
 // DeviceModelService implements business logic for DeviceModel resources.
@@ -42,6 +43,14 @@ func (s *DeviceModelService) CreateDeviceModel(dm *models.DeviceModel) (*models.
 		}
 		return nil, fmt.Errorf("create device model: %w", err)
 	}
+
+	if len(dm.PortGroups) > 0 {
+		out.PortGroups, err = s.repo.SetPortGroups(out.ID, dm.PortGroups)
+		if err != nil {
+			return nil, fmt.Errorf("set port groups for new model %d: %w", out.ID, err)
+		}
+	}
+
 	slog.Info("device model created", "deviceModelID", out.ID, "vendor", out.Vendor, "model", out.Model)
 	return out, nil
 }
@@ -87,6 +96,13 @@ func (s *DeviceModelService) UpdateDeviceModel(dm *models.DeviceModel) (*models.
 		}
 		return nil, fmt.Errorf("update device model %d: %w", dm.ID, err)
 	}
+
+	// Always replace port groups on update (empty slice clears them).
+	out.PortGroups, err = s.repo.SetPortGroups(out.ID, dm.PortGroups)
+	if err != nil {
+		return nil, fmt.Errorf("set port groups for model %d: %w", dm.ID, err)
+	}
+
 	slog.Info("device model updated", "deviceModelID", out.ID)
 	return out, nil
 }

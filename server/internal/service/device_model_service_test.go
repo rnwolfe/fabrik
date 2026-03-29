@@ -96,6 +96,25 @@ func (r *fakeDeviceModelRepo) Duplicate(sourceID int64, newVendor, newModel stri
 	return &out, nil
 }
 
+func (r *fakeDeviceModelRepo) SetPortGroups(deviceModelID int64, groups []models.PortGroup) ([]models.PortGroup, error) {
+	dm, ok := r.models[deviceModelID]
+	if !ok {
+		return nil, models.ErrNotFound
+	}
+	out := make([]models.PortGroup, len(groups))
+	for i, g := range groups {
+		out[i] = models.PortGroup{
+			ID:            int64(i + 1),
+			DeviceModelID: deviceModelID,
+			Count:         g.Count,
+			SpeedGbps:     g.SpeedGbps,
+			Label:         g.Label,
+		}
+	}
+	dm.PortGroups = out
+	return out, nil
+}
+
 // --- tests ---
 
 func TestDeviceModelService_Create(t *testing.T) {

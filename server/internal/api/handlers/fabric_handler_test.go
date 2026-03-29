@@ -43,7 +43,7 @@ func makeFabricResp(id int64, name string, stages, radix int, os float64) *servi
 			TotalSwitches: 33, TotalHostPorts: 32,
 		},
 		Metrics: &service.FabricMetrics{
-			TotalSwitches: 33, TotalHostPorts: 32, OversubscriptionRatio: os,
+			LeafSpineOversubscription: os,
 		},
 	}
 }
@@ -105,20 +105,20 @@ func (s *fakeFabricService) DeleteFabric(id int64) error {
 	return nil
 }
 
-func (s *fakeFabricService) PreviewTopology(stages int, radix int, oversubscription float64) (*service.TopologyPlan, error) {
-	if stages != 2 && stages != 3 && stages != 5 {
+func (s *fakeFabricService) PreviewTopology(req service.PreviewTopologyRequest) (*service.TopologyPlan, error) {
+	if req.Stages != 2 && req.Stages != 3 && req.Stages != 5 {
 		return nil, errors.Join(models.ErrConstraintViolation, errors.New("stages must be 2, 3, or 5"))
 	}
-	if radix <= 0 {
+	if req.Radix <= 0 {
 		return nil, errors.Join(models.ErrConstraintViolation, errors.New("radix must be > 0"))
 	}
-	if oversubscription < 1.0 {
+	if req.Oversubscription < 1.0 {
 		return nil, errors.Join(models.ErrConstraintViolation, errors.New("oversubscription must be >= 1.0"))
 	}
 	return &service.TopologyPlan{
-		Stages: stages, Radix: radix, Oversubscription: oversubscription,
-		SpineCount: 32, LeafCount: 1, LeafUplinks: 32, LeafDownlinks: 32,
-		TotalSwitches: 33, TotalHostPorts: 32,
+		Stages: req.Stages, Radix: req.Radix, Oversubscription: req.Oversubscription,
+		SpineCount: 32, LeafCount: 64, LeafUplinks: 32, LeafDownlinks: 32,
+		TotalSwitches: 96, TotalHostPorts: 2048,
 	}, nil
 }
 

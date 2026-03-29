@@ -16,6 +16,7 @@ import (
 	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
+//go:embed docs/knowledge
 var docsFS embed.FS
 
 func main() {

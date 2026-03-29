@@ -17,7 +17,7 @@ type FabricService interface {
 	GetFabric(id int64) (*service.FabricResponse, error)
 	UpdateFabric(id int64, req service.UpdateFabricRequest) (*service.FabricResponse, error)
 	DeleteFabric(id int64) error
-	PreviewTopology(stages int, radix int, oversubscription float64) (*service.TopologyPlan, error)
+	PreviewTopology(req service.PreviewTopologyRequest) (*service.TopologyPlan, error)
 	ListDeviceModels() ([]*models.DeviceModel, error)
 }
 
@@ -155,19 +155,13 @@ func (h *FabricHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *FabricHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
-	type previewRequest struct {
-		Stages           int     `json:"stages"`
-		Radix            int     `json:"radix"`
-		Oversubscription float64 `json:"oversubscription"`
-	}
-
-	var req previewRequest
+	var req service.PreviewTopologyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	plan, err := h.svc.PreviewTopology(req.Stages, req.Radix, req.Oversubscription)
+	plan, err := h.svc.PreviewTopology(req)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())

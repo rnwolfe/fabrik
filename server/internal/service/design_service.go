@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
+	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
 // DesignRepository is the store interface required by DesignService.
@@ -15,6 +16,7 @@ type DesignRepository interface {
 	List() ([]*models.Design, error)
 	Get(id int64) (*models.Design, error)
 	Delete(id int64) error
+	GetOrCreateScaffold(designID int64) (*store.DesignScaffold, error)
 }
 
 // DesignService implements business logic for Design resources.
@@ -59,6 +61,19 @@ func (s *DesignService) GetDesign(id int64) (*models.Design, error) {
 		return nil, fmt.Errorf("get design %d: %w", id, err)
 	}
 	return d, nil
+}
+
+// GetScaffold returns the default site and super-block for a design, creating them if needed.
+func (s *DesignService) GetScaffold(designID int64) (*store.DesignScaffold, error) {
+	// Verify the design exists.
+	if _, err := s.repo.Get(designID); err != nil {
+		return nil, fmt.Errorf("get design %d: %w", designID, err)
+	}
+	scaffold, err := s.repo.GetOrCreateScaffold(designID)
+	if err != nil {
+		return nil, fmt.Errorf("scaffold design %d: %w", designID, err)
+	}
+	return scaffold, nil
 }
 
 // DeleteDesign removes the design with the given id.
