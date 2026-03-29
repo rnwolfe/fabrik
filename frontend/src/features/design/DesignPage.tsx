@@ -135,7 +135,9 @@ export default function DesignPage() {
     }
   }
 
-  // Auto-select first block
+  // Auto-select first block when blocks load. Calling setState inside an effect
+  // is intentional here — we're syncing UI selection state with fetched data.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if ((blocks ?? []).length > 0 && !selectedBlockId) {
       setSelectedBlockId(blocks![0].id);
@@ -145,6 +147,7 @@ export default function DesignPage() {
       setSelectedRackId(null);
     }
   }, [blocks, selectedBlockId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const selectedBlock = (blocks ?? []).find((b: Block) => b.id === selectedBlockId) ?? null;
 
@@ -169,7 +172,7 @@ export default function DesignPage() {
         rack_type_id: rackTypeId,
         height_u: rt?.height_u ?? 42,
         power_capacity_w: rt?.power_capacity_w ?? 10000,
-      } as any);
+      });
       // Then add it to the block
       await blocksApi.addRack({ rack_id: rack.id, block_id: blockId });
       return rack;
@@ -207,6 +210,7 @@ export default function DesignPage() {
     reset: blockReset,
     setValue: blockSetValue,
   } = useForm<NewBlockForm>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(newBlockSchema) as any,
   });
 
@@ -215,6 +219,7 @@ export default function DesignPage() {
     handleSubmit: rackHandleSubmit,
     reset: rackReset,
   } = useForm<AddRackForm>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(addRackSchema) as any,
   });
 
@@ -439,7 +444,7 @@ export default function DesignPage() {
             {(rackTypes ?? []).length > 0 && (
               <div className="space-y-1.5">
                 <Label>Rack Template</Label>
-                <Select onValueChange={(v) => rackReset({ ...rackReset, rack_type_id: Number(v) } as any)}>
+                <Select onValueChange={(v) => rackReset({ rack_type_id: Number(v) } as Partial<AddRackForm>)}>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select template (optional)…">
                       {(value: string) => {

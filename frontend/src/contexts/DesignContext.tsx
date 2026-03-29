@@ -19,4 +19,5 @@ export function DesignProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useDesign = () => useContext(DesignContext);

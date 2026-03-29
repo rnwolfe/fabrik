@@ -6,6 +6,8 @@ export interface RackInput {
   description?: string;
   rack_type_id?: number;
   block_id?: number;
+  height_u?: number;
+  power_capacity_w?: number;
 }
 
 export interface RackTypeInput {
