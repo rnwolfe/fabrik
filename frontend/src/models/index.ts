@@ -238,6 +238,24 @@ export interface DesignMetrics {
   empty: boolean;
 }
 
+export interface DerivedTier {
+  scope_type: AggregationScope;
+  scope_id: number;
+  scope_name: string;
+  device_model?: DeviceModel;
+  spine_count: number;
+  port_count: number;
+  allocated_ports: number;
+}
+
+export interface DerivedFabric {
+  design_id: number;
+  plane: NetworkPlane;
+  stages: number;
+  topology?: TopologyPlan;
+  tiers: DerivedTier[];
+}
+
 export interface RackType {
   id: number;
   name: string;

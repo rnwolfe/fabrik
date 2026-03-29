@@ -410,6 +410,7 @@ export default function DesignPage() {
             />
           ) : (
             <DesignSummary
+              designId={activeDesignId!}
               blocks={blocks ?? []}
               racksByBlock={racksByBlock}
             />
