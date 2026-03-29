@@ -30,17 +30,13 @@ build-frontend:
 	cd frontend && npm run build
 
 test-frontend:
-	cd frontend && npm test -- --run
+	cd frontend && npm test
 
 lint-frontend:
 	cd frontend && npm run lint
 
-# E2E tests (requires running server)
-test-e2e:
-	cd frontend && npx playwright test
-
 # Development — hot reload via air (Go) + Vite (frontend)
-serve: setup
+serve:
 	@echo "Starting fabrik dev server..."
 	@echo "  Backend:  http://localhost:8080  (hot reload via air)"
 	@echo "  Frontend: http://localhost:4200  (hot reload via Vite)"
