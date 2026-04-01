@@ -32,10 +32,6 @@ func newFakeDeriveFabricRepo() *fakeDeriveFabricRepo {
 	}
 }
 
-func (r *fakeDeriveFabricRepo) aggKey(st models.AggregationScope, id int64, p models.NetworkPlane) string {
-	return string(st) + ":" + string(p) + ":" + string(rune(id))
-}
-
 func (r *fakeDeriveFabricRepo) GetDesign(id int64) (*models.Design, error) {
 	d, ok := r.designs[id]
 	if !ok {

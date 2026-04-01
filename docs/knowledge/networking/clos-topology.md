@@ -1,12 +1,27 @@
 # Clos Topology Designer
 
 The Clos topology designer lets you plan multi-stage folded-Clos fabrics for datacenter networks.
-You configure the stage count, switch radix, and oversubscription ratio; the tool calculates
-the exact switch counts and port distributions required.
+Stages emerge automatically from your design hierarchy — each level you equip with aggregation
+switches adds one tier to the Clos fabric. The tool calculates switch counts and port distributions
+based on the hardware you assign.
+
+## How stages emerge
+
+fabrik derives topology stages from the hierarchy you build:
+
+| Hierarchy levels with aggregation | Resulting topology |
+|------------------------------------|-------------------|
+| Block only (leaf + spine) | 2-stage Leaf-Spine |
+| Block + Super-Block (super-spine) | 3-stage Leaf-Spine-SuperSpine |
+| Block + Super-Block + Site (agg) | 5-stage Extended Clos |
+
+You do not configure stage count directly. Assign aggregation switch models at each hierarchy
+level and the topology is derived automatically. This means designs naturally grow from 2-stage
+to 3-stage to 5-stage as your datacenter expands.
 
 ## Topology parameters
 
-### Stage count
+### Stage count reference
 
 | Stages | Common name | Use case |
 |--------|-------------|----------|
@@ -68,9 +83,9 @@ bandwidth at the required scale.
 
 ## Device model assignment
 
-Once you have defined the topology parameters, assign real hardware switch models to each
-role (leaf, spine, super-spine). The tool will surface a warning if the device's port count
-differs from the configured radix, which may indicate a misconfiguration.
+Assign real hardware switch models at each hierarchy level (block, super-block, site).
+The tool surfaces a warning if the device's port count differs from the derived radix,
+which may indicate a misconfiguration.
 
 If no device models are in the catalog, navigate to the **Catalog** page to add them.
 
@@ -82,8 +97,8 @@ The designer calculates and displays:
 |--------|-------------|
 | Total switches | Sum of all switches across all roles |
 | Total host ports | Leaf count × leaf downlinks |
-| Oversubscription ratio | As configured |
-| Radix correction | Noted when radix is snapped to ensure even divisibility |
+| Oversubscription ratio | Derived from port group split and spine count |
+| Stage count | Derived from hierarchy depth |
 
 ## References
 

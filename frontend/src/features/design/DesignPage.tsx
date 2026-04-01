@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -174,7 +174,7 @@ export default function DesignPage() {
       if (prev.has(blockId)) return prev;
       return new Map(prev).set(blockId, superBlockSpineAgg.spine_count);
     });
-  }, [selectedBlock, superBlockSpineAgg]);
+  }, [selectedBlock, superBlockSpineAgg, setBlockSpineModel, setBlockSpineCount]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Mutations ────────────────────────────────────────────────────────────
@@ -287,17 +287,24 @@ export default function DesignPage() {
     [selectedBlock, blockSpineCount, saveSpineAggMutation]
   );
 
+  const spineCountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleSpineCountChange = useCallback((blockId: number, value: number) => {
     setBlockSpineCount((prev) => new Map(prev).set(blockId, value));
     if (!selectedBlock) return;
     const effectiveSpineModelId = blockSpineModel.get(blockId);
     if (!effectiveSpineModelId) return;
-    saveSpineAggMutation.mutate({
-      superBlockId: selectedBlock.super_block_id,
-      plane: 'front_end',
-      deviceModelId: effectiveSpineModelId,
-      spineCount: value,
-    });
+
+    // Debounce the save — rapid +/- clicks only fire one request
+    if (spineCountTimerRef.current) clearTimeout(spineCountTimerRef.current);
+    spineCountTimerRef.current = setTimeout(() => {
+      saveSpineAggMutation.mutate({
+        superBlockId: selectedBlock.super_block_id,
+        plane: 'front_end',
+        deviceModelId: effectiveSpineModelId,
+        spineCount: value,
+      });
+    }, 400);
   }, [selectedBlock, blockSpineModel, saveSpineAggMutation]);
 
   // ── No design selected ─────────────────────────────────────────────────
