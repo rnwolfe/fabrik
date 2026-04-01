@@ -6,10 +6,12 @@ import {
   ArrowUpDown,
   Minus,
   Plus,
+  Info,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import DeviceModelPicker from '@/components/DeviceModelPicker';
 import ClosDiagram from './ClosDiagram';
 import type {
@@ -248,7 +250,12 @@ export default function BlockDetailPanel({
           <Stat icon={Layers} label="Racks" value={`${rackCount}${maxRacks ? `/${maxRacks}` : ''}`} />
           <Stat icon={Server} label="Leaves" value={topology.leaf_count} />
           <Stat icon={Server} label="Spines" value={topology.spine_count} />
-          <Stat icon={Zap} label="Host Ports" value={topology.total_host_ports} />
+          <Stat
+            icon={Zap}
+            label="Host Ports"
+            value={topology.total_host_ports}
+            tooltip="Physical leaf downlink port ceiling (1:1 assumed). Actual server connections may be higher with breakout cabling (e.g. 400G → 4×100G)."
+          />
         </div>
       )}
 
@@ -274,16 +281,28 @@ function Stat({
   icon: Icon,
   label,
   value,
+  tooltip,
 }: {
   icon: typeof Server;
   label: string;
   value: string | number;
+  tooltip?: string;
 }) {
   return (
     <div className="flex items-center gap-2 rounded-md bg-muted/50 px-2.5 py-1.5">
       <Icon className="size-3.5 text-muted-foreground" />
-      <div>
-        <p className="text-[10px] text-muted-foreground">{label}</p>
+      <div className="flex-1">
+        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+          {label}
+          {tooltip && (
+            <Tooltip>
+              <TooltipTrigger>
+                <Info className="size-2.5 cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[220px] text-xs">{tooltip}</TooltipContent>
+            </Tooltip>
+          )}
+        </p>
         <p className="text-sm font-semibold">{value}</p>
       </div>
     </div>
