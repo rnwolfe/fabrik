@@ -153,15 +153,8 @@ export default function BlockDetailPanel({
   const portGroupResult = leafModel ? deriveFromPortGroups(leafModel) : null;
   const maxSpineCount = leafModel ? maxSpines(leafModel) : 0;
 
-  // Default spine count:
-  //   - With port groups: uplink port count is the non-blocking point (already known)
-  //   - Without port groups: start at rackCount * 2 (one spine per leaf in this block)
-  //     rather than maxSpineCount (all-but-one ports), which is unrealistically large
-  //     for a fresh block.
-  const defaultSpineCount = portGroupResult
-    ? portGroupResult.uplinks
-    : Math.max(2, rackCount * 2);
-  const effectiveSpineCount = spineCountProp ?? Math.min(defaultSpineCount, maxSpineCount);
+  // Default to 2 spines — a minimal HA pair. User adjusts from there.
+  const effectiveSpineCount = spineCountProp ?? Math.min(2, maxSpineCount);
 
   const topology = useMemo(
     () => deriveTopology(leafModel, spineModel, effectiveSpineCount, rackCount),
