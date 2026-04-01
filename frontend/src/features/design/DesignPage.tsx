@@ -197,14 +197,6 @@ export default function DesignPage() {
     },
   });
 
-  const assignAggMutation = useMutation({
-    mutationFn: ({ blockId, deviceModelId }: { blockId: number; deviceModelId: number }) =>
-      blocksApi.assignAggregation(blockId, 'front_end', deviceModelId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['aggs'] });
-    },
-  });
-
   // ── Forms ────────────────────────────────────────────────────────────────
 
   const {
@@ -249,10 +241,8 @@ export default function DesignPage() {
   const handleAssignSpine = useCallback(
     (blockId: number, deviceModelId: number) => {
       setBlockSpineModel((prev) => new Map(prev).set(blockId, deviceModelId));
-      // Also assign as frontend aggregation so port tracking works
-      assignAggMutation.mutate({ blockId, deviceModelId });
     },
-    [assignAggMutation]
+    []
   );
 
   const handleSpineCountChange = useCallback((blockId: number, value: number) => {
