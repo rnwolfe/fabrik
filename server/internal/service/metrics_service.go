@@ -96,6 +96,8 @@ func computeFabricMetrics(df *DerivedFabric) (
 	}
 
 	topo := df.Topology
+	// NOTE: FabricID is set to DesignID because the derived fabric has no
+	// separate entity — the old fabrics table is deprecated.
 	fabricID := df.DesignID
 	fabricName := "Derived Fabric"
 
@@ -165,6 +167,9 @@ func computeFabricMetrics(df *DerivedFabric) (
 			AvailablePorts: ssTotal - ssAllocated,
 		})
 	}
+
+	// TODO: compute bisectionBW once port speed is available in the device model.
+	// For a 2-stage Clos: bisectionBW = spineCount * leafUplinks * portSpeedGbps.
 
 	return entries, portEntries, totalSwitches, totalHostPorts, bisectionBW
 }

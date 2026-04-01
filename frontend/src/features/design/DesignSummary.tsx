@@ -17,6 +17,7 @@ export default function DesignSummary({
   const { data: derivedFabric } = useQuery({
     queryKey: ['designs', designId, 'fabric'],
     queryFn: () => designsApi.getDerivedFabric(designId),
+    retry: false,
   });
 
   let totalRacks = 0;
