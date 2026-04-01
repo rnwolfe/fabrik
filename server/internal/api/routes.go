@@ -64,6 +64,9 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("POST /api/blocks/add-rack", blocks.AddRackToBlock)
 	mux.HandleFunc("DELETE /api/block-racks/{rack_id}", blocks.RemoveRackFromBlock)
 
+	mux.HandleFunc("PUT /api/super-blocks/{id}/aggregations/{plane}", blocks.AssignSuperBlockAggregation)
+	mux.HandleFunc("GET /api/super-blocks/{id}/aggregations/{plane}", blocks.GetSuperBlockAggregation)
+
 	mux.HandleFunc("PUT /api/blocks/{block_id}/management-agg", management.SetManagementAgg)
 	mux.HandleFunc("GET /api/blocks/{block_id}/management-agg", management.GetManagementAgg)
 	mux.HandleFunc("DELETE /api/blocks/{block_id}/management-agg", management.RemoveManagementAgg)

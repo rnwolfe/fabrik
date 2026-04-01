@@ -147,6 +147,31 @@ func (s *fakeBlockService) ListPortConnections(blockID int64, plane models.Netwo
 	return s.conns[key], nil
 }
 
+func (s *fakeBlockService) AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error) {
+	key := fmt.Sprintf("sb:%d:%s", superBlockID, plane)
+	summary := &models.TierAggregationSummary{
+		TierAggregation: models.TierAggregation{
+			ScopeType:     models.ScopeSuperBlock,
+			ScopeID:       superBlockID,
+			Plane:         plane,
+			DeviceModelID: deviceModelID,
+			SpineCount:    spineCount,
+		},
+	}
+	s.aggs[key] = summary
+	return summary, nil
+}
+
+func (s *fakeBlockService) GetSuperBlockAggregationSummary(superBlockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error) {
+	key := fmt.Sprintf("sb:%d:%s", superBlockID, plane)
+	sum, ok := s.aggs[key]
+	if !ok {
+		return nil, models.ErrNotFound
+	}
+	cp := *sum
+	return &cp, nil
+}
+
 // --- helpers ---
 
 func blockRequest(t *testing.T, method, url string, body any) *http.Request {

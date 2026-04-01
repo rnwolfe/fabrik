@@ -41,3 +41,13 @@ export const scaffoldApi = {
   get: (designId: number) =>
     api.get<{ site_id: number; super_block_id: number }>(`/designs/${designId}/scaffold`),
 };
+
+export const superBlocksApi = {
+  assignAggregation: (superBlockId: number, plane: string, deviceModelId: number, spineCount: number) =>
+    api.put<TierAggregationSummary>(`/super-blocks/${superBlockId}/aggregations/${plane}`, {
+      device_model_id: deviceModelId,
+      spine_count: spineCount,
+    }),
+  getAggregation: (superBlockId: number, plane: string) =>
+    api.get<TierAggregationSummary>(`/super-blocks/${superBlockId}/aggregations/${plane}`),
+};

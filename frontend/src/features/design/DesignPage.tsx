@@ -9,7 +9,7 @@ import {
   ChevronDown,
   Layers,
 } from 'lucide-react';
-import { blocksApi, scaffoldApi } from '@/api/blocks';
+import { blocksApi, scaffoldApi, superBlocksApi } from '@/api/blocks';
 import { racksApi } from '@/api/racks';
 import { catalogApi } from '@/api/catalog';
 import { designsApi } from '@/api/designs';
@@ -151,6 +151,32 @@ export default function DesignPage() {
 
   const selectedBlock = (blocks ?? []).find((b: Block) => b.id === selectedBlockId) ?? null;
 
+  // Fetch persisted super-block spine aggregation when a block is selected
+  const { data: superBlockSpineAgg } = useQuery({
+    queryKey: ['super-block-agg', selectedBlock?.super_block_id, 'front_end'],
+    queryFn: () => superBlocksApi.getAggregation(selectedBlock!.super_block_id, 'front_end'),
+    enabled: !!selectedBlock,
+    // 404 is expected when no agg assigned yet — suppress the error
+    retry: false,
+  });
+
+  // Initialize blockSpineModel / blockSpineCount from persisted data, but don't
+  // clobber values the user has already set for this block in the current session.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!selectedBlock || !superBlockSpineAgg) return;
+    const blockId = selectedBlock.id;
+    setBlockSpineModel((prev) => {
+      if (prev.has(blockId)) return prev;
+      return new Map(prev).set(blockId, superBlockSpineAgg.device_model_id);
+    });
+    setBlockSpineCount((prev) => {
+      if (prev.has(blockId)) return prev;
+      return new Map(prev).set(blockId, superBlockSpineAgg.spine_count);
+    });
+  }, [selectedBlock, superBlockSpineAgg]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const createBlockMutation = useMutation({
@@ -194,6 +220,14 @@ export default function DesignPage() {
       queryClient.invalidateQueries({ queryKey: ['racks'] });
       queryClient.invalidateQueries({ queryKey: ['aggs'] });
       setSelectedRackId(null);
+    },
+  });
+
+  const saveSpineAggMutation = useMutation({
+    mutationFn: ({ superBlockId, plane, deviceModelId, spineCount }: { superBlockId: number; plane: string; deviceModelId: number; spineCount: number }) =>
+      superBlocksApi.assignAggregation(superBlockId, plane, deviceModelId, spineCount),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['super-block-agg', variables.superBlockId, variables.plane] });
     },
   });
 
@@ -241,13 +275,30 @@ export default function DesignPage() {
   const handleAssignSpine = useCallback(
     (blockId: number, deviceModelId: number) => {
       setBlockSpineModel((prev) => new Map(prev).set(blockId, deviceModelId));
+      if (!selectedBlock) return;
+      const effectiveSpineCount = blockSpineCount.get(blockId) ?? 0;
+      saveSpineAggMutation.mutate({
+        superBlockId: selectedBlock.super_block_id,
+        plane: 'front_end',
+        deviceModelId,
+        spineCount: effectiveSpineCount,
+      });
     },
-    []
+    [selectedBlock, blockSpineCount, saveSpineAggMutation]
   );
 
   const handleSpineCountChange = useCallback((blockId: number, value: number) => {
     setBlockSpineCount((prev) => new Map(prev).set(blockId, value));
-  }, []);
+    if (!selectedBlock) return;
+    const effectiveSpineModelId = blockSpineModel.get(blockId);
+    if (!effectiveSpineModelId) return;
+    saveSpineAggMutation.mutate({
+      superBlockId: selectedBlock.super_block_id,
+      plane: 'front_end',
+      deviceModelId: effectiveSpineModelId,
+      spineCount: value,
+    });
+  }, [selectedBlock, blockSpineModel, saveSpineAggMutation]);
 
   // ── No design selected ─────────────────────────────────────────────────
 
