@@ -30,7 +30,7 @@ interface BlockDetailPanelProps {
   spineModelId?: number;
   spineCount: number | null;
   onSpineCountChange: (value: number) => void;
-  onAssignSpine: (deviceModelId: number) => void;
+  onAssignSpine: (deviceModelId: number, initialSpineCount: number) => void;
 }
 
 /**
@@ -186,7 +186,7 @@ export default function BlockDetailPanel({
         <DeviceModelPicker
           devices={networkDevices}
           value={spineModelId}
-          onSelect={onAssignSpine}
+          onSelect={(id) => onAssignSpine(id, effectiveSpineCount)}
           placeholder="Select spine model…"
           triggerClassName="h-8 text-xs"
         />

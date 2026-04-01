@@ -286,21 +286,20 @@ export default function DesignPage() {
   });
 
   const handleAssignSpine = useCallback(
-    (blockId: number, deviceModelId: number) => {
+    (blockId: number, deviceModelId: number, initialSpineCount: number) => {
+      // Use the count BlockDetailPanel computed as the default (port-group aware).
+      // Avoids persisting 0 when the user hasn't touched the stepper yet.
+      const count = blockSpineCount.get(blockId) ?? initialSpineCount;
       setBlockSpineModel((prev) => new Map(prev).set(blockId, deviceModelId));
+      setBlockSpineCount((prev) => prev.has(blockId) ? prev : new Map(prev).set(blockId, count));
       if (!selectedBlock) return;
-      const effectiveSpineCount = blockSpineCount.get(blockId) ?? 0;
       saveSpineAggMutation.mutate({
         superBlockId: selectedBlock.super_block_id,
         plane: 'front_end',
         deviceModelId,
-        spineCount: effectiveSpineCount,
+        spineCount: count,
       });
-      placeSpineDevicesMutation.mutate({
-        blockId,
-        deviceModelId,
-        count: blockSpineCount.get(blockId) ?? 2,
-      });
+      placeSpineDevicesMutation.mutate({ blockId, deviceModelId, count });
     },
     [selectedBlock, blockSpineCount, saveSpineAggMutation, placeSpineDevicesMutation]
   );
@@ -477,7 +476,7 @@ export default function DesignPage() {
               spineModelId={blockSpineModel.get(selectedBlock.id)}
               spineCount={blockSpineCount.get(selectedBlock.id) ?? null}
               onSpineCountChange={(v) => handleSpineCountChange(selectedBlock.id, v)}
-              onAssignSpine={(id) => handleAssignSpine(selectedBlock.id, id)}
+              onAssignSpine={(id, initialCount) => handleAssignSpine(selectedBlock.id, id, initialCount)}
             />
           ) : (
             <DesignSummary
