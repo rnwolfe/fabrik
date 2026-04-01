@@ -41,7 +41,7 @@ serve:
 	@echo "  Backend:  http://localhost:8080  (hot reload via air)"
 	@echo "  Frontend: http://localhost:4200  (hot reload via Vite)"
 	@trap 'kill 0' INT; \
-	  air & \
+	  (cd server && air) & \
 	  (cd frontend && npm run dev) & \
 	  wait
 
