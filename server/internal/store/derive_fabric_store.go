@@ -41,11 +41,11 @@ func (s *DeriveFabricStore) ListSitesByDesign(designID int64) ([]*models.Site, e
 	defer rows.Close()
 	var out []*models.Site
 	for rows.Next() {
-		s := &models.Site{}
-		if err := rows.Scan(&s.ID, &s.DesignID, &s.Name, &s.Description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		site := &models.Site{}
+		if err := rows.Scan(&site.ID, &site.DesignID, &site.Name, &site.Description, &site.CreatedAt, &site.UpdatedAt); err != nil {
 			return nil, err
 		}
-		out = append(out, s)
+		out = append(out, site)
 	}
 	return out, rows.Err()
 }

@@ -154,10 +154,15 @@ func (s *DeriveFabricService) collectTier(scopeType models.AggregationScope, sco
 	}
 
 	dm, err := s.repo.GetDeviceModel(agg.DeviceModelID)
-	if err == nil {
-		tier.DeviceModel = dm
-		tier.PortCount = dm.PortCount
+	if errors.Is(err, models.ErrNotFound) {
+		return nil, fmt.Errorf("device model %d not found for aggregation %d", agg.DeviceModelID, agg.ID)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("get device model %d for aggregation %d: %w", agg.DeviceModelID, agg.ID, err)
+	}
+
+	tier.DeviceModel = dm
+	tier.PortCount = dm.PortCount
 
 	return tier, nil
 }

@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
@@ -77,7 +78,7 @@ func (r *fakeDeriveFabricRepo) GetDeviceModel(id int64) (*models.DeviceModel, er
 }
 
 func itoa(i int64) string {
-	return string(rune(i))
+	return strconv.FormatInt(i, 10)
 }
 
 // setAgg registers an aggregation in the fake repo using consistent key format.

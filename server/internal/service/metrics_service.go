@@ -116,7 +116,7 @@ func computeFabricMetrics(df *DerivedFabric) (
 	entry := models.FabricMetricEntry{
 		FabricID:                        fabricID,
 		FabricName:                      fabricName,
-		Tier:                            "front_end",
+		Tier:                            string(models.FabricTierFrontEnd),
 		Stages:                          topo.Stages,
 		LeafSpineOversubscription:       leafSpineOversub,
 		SpineSuperSpineOversubscription: spineSuperSpineOversub,
