@@ -165,18 +165,22 @@ func (s *BlockStore) UpdateRackBlock(rackID int64, blockID *int64) error {
 
 // CreateRack inserts a new Rack and returns the saved record.
 func (s *BlockStore) CreateRack(r *models.Rack) (*models.Rack, error) {
+	role := r.Role
+	if role == "" {
+		role = models.RackRoleCompute
+	}
 	const q = `
-		INSERT INTO racks (block_id, rack_type_id, name, height_u, power_capacity_w,
+		INSERT INTO racks (block_id, rack_type_id, name, role, height_u, power_capacity_w,
 		                   power_oversub_pct_warn, power_oversub_pct_max, description)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, block_id, rack_type_id, name, role, height_u, power_capacity_w,
 		          power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at`
 
 	out := &models.Rack{}
 	err := s.db.QueryRow(q,
-		r.BlockID, r.RackTypeID, r.Name, r.HeightU, r.PowerCapacityW,
+		r.BlockID, r.RackTypeID, r.Name, role, r.HeightU, r.PowerCapacityW,
 		r.PowerOversubPctWarn, r.PowerOversubPctMax, r.Description,
-	).Scan(&out.ID, &out.BlockID, &out.RackTypeID, &out.Name, &out.HeightU, &out.PowerCapacityW,
+	).Scan(&out.ID, &out.BlockID, &out.RackTypeID, &out.Name, &out.Role, &out.HeightU, &out.PowerCapacityW,
 		&out.PowerOversubPctWarn, &out.PowerOversubPctMax, &out.Description, &out.CreatedAt, &out.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create rack: %w", err)
@@ -200,15 +204,54 @@ func (s *BlockStore) PlaceDevice(d *models.Device) (*models.Device, error) {
 	return out, nil
 }
 
+// ListRacksInBlock returns all racks assigned to the given block, ordered by id.
+func (s *BlockStore) ListRacksInBlock(blockID int64) ([]*models.Rack, error) {
+	const q = `
+		SELECT id, block_id, rack_type_id, name, role, height_u, power_capacity_w,
+		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
+		FROM racks WHERE block_id = ? ORDER BY id`
+
+	rows, err := s.db.Query(q, blockID)
+	if err != nil {
+		return nil, fmt.Errorf("list racks in block %d: %w", blockID, err)
+	}
+	defer rows.Close()
+
+	var out []*models.Rack
+	for rows.Next() {
+		r := &models.Rack{}
+		if err := rows.Scan(&r.ID, &r.BlockID, &r.RackTypeID, &r.Name, &r.Role, &r.HeightU, &r.PowerCapacityW,
+			&r.PowerOversubPctWarn, &r.PowerOversubPctMax, &r.Description, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan rack in block: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate racks in block: %w", err)
+	}
+	return out, nil
+}
+
+// RemoveDevicesByRackAndRole deletes all devices in a rack with the given role.
+func (s *BlockStore) RemoveDevicesByRackAndRole(rackID int64, role models.DeviceRole) error {
+	_, err := s.db.Exec(`DELETE FROM devices WHERE rack_id = ? AND role = ?`, rackID, role)
+	if err != nil {
+		return fmt.Errorf("remove devices by rack %d and role %s: %w", rackID, role, err)
+	}
+	return nil
+}
+
 // GetRack returns the Rack with the given id, or models.ErrNotFound.
 func (s *BlockStore) GetRack(id int64) (*models.Rack, error) {
 	const q = `
-		SELECT id, block_id, rack_type_id, name, height_u, power_capacity_w, description, created_at, updated_at
+		SELECT id, block_id, rack_type_id, name, role, height_u, power_capacity_w,
+		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
 		FROM racks WHERE id = ?`
 
 	r := &models.Rack{}
 	err := s.db.QueryRow(q, id).
-		Scan(&r.ID, &r.BlockID, &r.RackTypeID, &r.Name, &r.HeightU, &r.PowerCapacityW, &r.Description, &r.CreatedAt, &r.UpdatedAt)
+		Scan(&r.ID, &r.BlockID, &r.RackTypeID, &r.Name, &r.Role, &r.HeightU, &r.PowerCapacityW,
+			&r.PowerOversubPctWarn, &r.PowerOversubPctMax, &r.Description, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}

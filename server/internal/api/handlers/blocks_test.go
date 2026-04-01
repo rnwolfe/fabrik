@@ -172,6 +172,10 @@ func (s *fakeBlockService) GetSuperBlockAggregationSummary(superBlockID int64, p
 	return &cp, nil
 }
 
+func (s *fakeBlockService) PlaceSpineDevices(blockID, spineModelID int64, count int) error {
+	return nil
+}
+
 // --- helpers ---
 
 func blockRequest(t *testing.T, method, url string, body any) *http.Request {

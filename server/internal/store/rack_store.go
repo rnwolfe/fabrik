@@ -21,7 +21,7 @@ func NewRackStore(db *sql.DB) *RackStore {
 // scanRack scans a row into a Rack.
 func scanRack(dest *models.Rack, row interface{ Scan(dest ...any) error }) error {
 	return row.Scan(
-		&dest.ID, &dest.BlockID, &dest.RackTypeID, &dest.Name,
+		&dest.ID, &dest.BlockID, &dest.RackTypeID, &dest.Name, &dest.Role,
 		&dest.HeightU, &dest.PowerCapacityW,
 		&dest.PowerOversubPctWarn, &dest.PowerOversubPctMax,
 		&dest.Description, &dest.CreatedAt, &dest.UpdatedAt,
@@ -30,16 +30,20 @@ func scanRack(dest *models.Rack, row interface{ Scan(dest ...any) error }) error
 
 // Create inserts a new Rack and returns the saved record.
 func (s *RackStore) Create(r *models.Rack) (*models.Rack, error) {
+	role := r.Role
+	if role == "" {
+		role = models.RackRoleCompute
+	}
 	const q = `
-		INSERT INTO racks (block_id, rack_type_id, name, height_u, power_capacity_w,
+		INSERT INTO racks (block_id, rack_type_id, name, role, height_u, power_capacity_w,
 		                   power_oversub_pct_warn, power_oversub_pct_max, description)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, block_id, rack_type_id, name, role, height_u, power_capacity_w,
 		          power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at`
 
 	out := &models.Rack{}
 	err := scanRack(out, s.db.QueryRow(q,
-		r.BlockID, r.RackTypeID, r.Name, r.HeightU, r.PowerCapacityW,
+		r.BlockID, r.RackTypeID, r.Name, role, r.HeightU, r.PowerCapacityW,
 		r.PowerOversubPctWarn, r.PowerOversubPctMax, r.Description,
 	))
 	if err != nil {
@@ -51,7 +55,7 @@ func (s *RackStore) Create(r *models.Rack) (*models.Rack, error) {
 // List returns all Rack records, optionally filtered by block_id.
 func (s *RackStore) List(blockID *int64) ([]*models.Rack, error) {
 	q := `
-		SELECT id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		SELECT id, block_id, rack_type_id, name, role, height_u, power_capacity_w,
 		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
 		FROM racks`
 	args := []any{}
@@ -85,7 +89,7 @@ func (s *RackStore) List(blockID *int64) ([]*models.Rack, error) {
 // Get returns the Rack with the given id, or models.ErrNotFound.
 func (s *RackStore) Get(id int64) (*models.Rack, error) {
 	const q = `
-		SELECT id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		SELECT id, block_id, rack_type_id, name, role, height_u, power_capacity_w,
 		       power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at
 		FROM racks
 		WHERE id = ?`
@@ -108,7 +112,7 @@ func (s *RackStore) Update(r *models.Rack) (*models.Rack, error) {
 		SET block_id = ?, name = ?, description = ?,
 		    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE id = ?
-		RETURNING id, block_id, rack_type_id, name, height_u, power_capacity_w,
+		RETURNING id, block_id, rack_type_id, name, role, height_u, power_capacity_w,
 		          power_oversub_pct_warn, power_oversub_pct_max, description, created_at, updated_at`
 
 	out := &models.Rack{}

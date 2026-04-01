@@ -270,6 +270,26 @@ func (r *fakeBlockRepo) PlaceDevice(d *models.Device) (*models.Device, error) {
 	return &out, nil
 }
 
+func (r *fakeBlockRepo) ListRacksInBlock(blockID int64) ([]*models.Rack, error) {
+	var out []*models.Rack
+	for _, rack := range r.racks {
+		if rack.BlockID != nil && *rack.BlockID == blockID {
+			cp := *rack
+			out = append(out, &cp)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeBlockRepo) RemoveDevicesByRackAndRole(rackID int64, role models.DeviceRole) error {
+	for id, d := range r.devices {
+		if d.RackID == rackID && d.Role == role {
+			delete(r.devices, id)
+		}
+	}
+	return nil
+}
+
 // --- helper to create a TierAggregation at block scope (used in test setup) ---
 
 func blockAgg(blockID, deviceModelID int64, plane models.NetworkPlane) *models.TierAggregation {
@@ -335,16 +355,16 @@ func TestBlockService_CreateBlockWithLeafModel(t *testing.T) {
 	repo.deviceModels[leafModel.ID] = leafModel
 	leafID := leafModel.ID
 
-	t.Run("auto-creates 2 racks with 4 leaf devices", func(t *testing.T) {
+	t.Run("auto-creates 4 racks with 8 leaf devices", func(t *testing.T) {
 		result, err := svc.CreateBlock(1, "block-A", "", &leafID, nil, 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(result.Racks) != 2 {
-			t.Fatalf("expected 2 racks, got %d", len(result.Racks))
+		if len(result.Racks) != 4 {
+			t.Fatalf("expected 4 racks (2 base + 2 compute), got %d", len(result.Racks))
 		}
 
-		// Each rack should have 2 leaf devices.
+		// Each rack should have 2 leaf devices = 8 total.
 		totalLeaves := 0
 		for _, rack := range result.Racks {
 			devices, _ := repo.ListDevicesInRack(rack.ID)
@@ -354,12 +374,28 @@ func TestBlockService_CreateBlockWithLeafModel(t *testing.T) {
 				}
 			}
 		}
-		if totalLeaves != 4 {
-			t.Errorf("expected 4 leaf devices total, got %d", totalLeaves)
+		if totalLeaves != 8 {
+			t.Errorf("expected 8 leaf devices total, got %d", totalLeaves)
+		}
+
+		// Verify 2 base racks and 2 compute racks.
+		baseCount, computeCount := 0, 0
+		for _, rack := range result.Racks {
+			if rack.Role == models.RackRoleBase {
+				baseCount++
+			} else if rack.Role == models.RackRoleCompute {
+				computeCount++
+			}
+		}
+		if baseCount != 2 {
+			t.Errorf("expected 2 base racks, got %d", baseCount)
+		}
+		if computeCount != 2 {
+			t.Errorf("expected 2 compute racks, got %d", computeCount)
 		}
 	})
 
-	t.Run("with spine model distributes spines across racks", func(t *testing.T) {
+	t.Run("with spine model distributes spines across base racks only", func(t *testing.T) {
 		spineModel := repo.addDeviceModel(36)
 		spineModel.HeightU = 1
 		repo.deviceModels[spineModel.ID] = spineModel
@@ -370,18 +406,25 @@ func TestBlockService_CreateBlockWithLeafModel(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// 4 spines distributed across 2 racks = 2 per rack.
+		// 4 spines distributed across 2 base racks = 2 per base rack; compute racks have 0.
+		totalSpines := 0
+		spinesInBase := 0
 		for _, rack := range result.Racks {
 			devices, _ := repo.ListDevicesInRack(rack.ID)
-			spines := 0
 			for _, d := range devices {
 				if d.Role == models.DeviceRoleSpine {
-					spines++
+					totalSpines++
+					if rack.Role == models.RackRoleBase {
+						spinesInBase++
+					}
 				}
 			}
-			if spines != 2 {
-				t.Errorf("rack %d: expected 2 spines, got %d", rack.ID, spines)
-			}
+		}
+		if totalSpines != 4 {
+			t.Errorf("expected 4 total spines, got %d", totalSpines)
+		}
+		if spinesInBase != 4 {
+			t.Errorf("expected all 4 spines in base racks, got %d in base racks", spinesInBase)
 		}
 	})
 }

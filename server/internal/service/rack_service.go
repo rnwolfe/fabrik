@@ -186,7 +186,7 @@ func (s *RackService) DeleteRackType(id int64) error {
 // --- Rack operations ---
 
 // CreateRack creates a new rack, optionally seeding specs from a rack type.
-func (s *RackService) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int) (*models.Rack, error) {
+func (s *RackService) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int, role models.RackRole) (*models.Rack, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: rack name is required", models.ErrConstraintViolation)
@@ -210,10 +210,14 @@ func (s *RackService) CreateRack(name, description string, blockID, rackTypeID *
 		heightU = 42
 	}
 
+	if role == "" {
+		role = models.RackRoleCompute
+	}
 	r, err := s.rackRepo.Create(&models.Rack{
 		BlockID:        blockID,
 		RackTypeID:     rackTypeID,
 		Name:           name,
+		Role:           role,
 		HeightU:        heightU,
 		PowerCapacityW: powerCapacityW,
 		Description:    description,

@@ -41,6 +41,8 @@ export default function BlockCard({
 
   const frontendAgg = aggs.find((a) => a.plane === 'front_end');
   const rackCount = racks.length;
+  const baseRackCount = racks.filter((r) => r.role === 'base').length;
+  const computeRackCount = racks.filter((r) => r.role === 'compute').length;
   const maxRacks = frontendAgg ? Math.floor(frontendAgg.total_ports / 2) : 0;
   const utilPct = maxRacks > 0 ? Math.round((rackCount / maxRacks) * 100) : 0;
 
@@ -78,7 +80,9 @@ export default function BlockCard({
         <div className="ml-auto flex items-center gap-1.5">
           {frontendAgg && (
             <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-              {rackCount}/{maxRacks} racks
+              {baseRackCount > 0 || computeRackCount > 0
+                ? `${baseRackCount}B+${computeRackCount}C/${maxRacks}`
+                : `${rackCount}/${maxRacks}`}
             </Badge>
           )}
           {!frontendAgg && (
@@ -131,8 +135,11 @@ export default function BlockCard({
                       : 'hover:bg-muted/50'
                   )}
                 >
-                  <Server className="size-3 text-muted-foreground shrink-0" />
+                  <Server className={cn("size-3 shrink-0", rack.role === 'base' ? 'text-blue-500' : 'text-muted-foreground')} />
                   <span className="truncate">{rack.name}</span>
+                  {rack.role === 'base' && (
+                    <span className="text-[9px] font-medium text-blue-500 bg-blue-500/10 rounded px-1">NET</span>
+                  )}
                   <span className="ml-auto text-muted-foreground">
                     {rack.used_u}/{rack.height_u}U
                   </span>

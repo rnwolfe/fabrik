@@ -63,6 +63,7 @@ type Rack struct {
 	BlockID             *int64    `json:"block_id"`
 	RackTypeID          *int64    `json:"rack_type_id"`
 	Name                string    `json:"name"`
+	Role                RackRole  `json:"role"`
 	HeightU             int       `json:"height_u"`
 	PowerCapacityW      int       `json:"power_capacity_w"`
 	PowerOversubPctWarn int       `json:"power_oversub_pct_warn"`
@@ -106,6 +107,15 @@ type PlaceDeviceResult struct {
 	Device  *Device `json:"device"`
 	Warning string  `json:"warning,omitempty"`
 }
+
+// RackRole enumerates whether a rack is a compute rack (servers + ToR leaves)
+// or a base rack (network infra: spines, firewalls, HSMs, control plane, etc. + ToR leaves).
+type RackRole string
+
+const (
+	RackRoleCompute RackRole = "compute"
+	RackRoleBase    RackRole = "base"
+)
 
 // DeviceRole enumerates the role of a device within the network fabric.
 type DeviceRole string

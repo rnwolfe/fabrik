@@ -147,6 +147,8 @@ export default function BlockDetailPanel({
     : undefined;
 
   const rackCount = racks.length;
+  const baseRackCount = racks.filter((r) => r.role === 'base').length;
+  const computeRackCount = racks.filter((r) => r.role === 'compute').length;
   const spineModel = spineModelId ? networkDevices.find((d) => d.id === spineModelId) : undefined;
   const portGroupResult = leafModel ? deriveFromPortGroups(leafModel) : null;
   const maxSpineCount = leafModel ? maxSpines(leafModel) : 0;
@@ -247,7 +249,14 @@ export default function BlockDetailPanel({
       {/* Topology stats */}
       {topology && (
         <div className="grid grid-cols-2 gap-2">
-          <Stat icon={Layers} label="Racks" value={`${rackCount}${maxRacks ? `/${maxRacks}` : ''}`} />
+          <Stat
+            icon={Layers}
+            label="Racks"
+            value={baseRackCount > 0 || computeRackCount > 0
+              ? `${baseRackCount}B + ${computeRackCount}C${maxRacks ? ` / ${maxRacks}` : ''}`
+              : `${rackCount}${maxRacks ? `/${maxRacks}` : ''}`}
+            tooltip="B = base (network infra), C = compute (servers)"
+          />
           <Stat icon={Server} label="Leaves" value={topology.leaf_count} />
           <Stat icon={Server} label="Spines" value={topology.spine_count} />
           <Stat
