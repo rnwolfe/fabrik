@@ -5,36 +5,21 @@ import (
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
 	"github.com/rnwolfe/fabrik/server/internal/service"
-	"github.com/rnwolfe/fabrik/server/internal/store"
 )
 
 // fakeMetricsRepo implements service.MetricsRepository for testing.
 type fakeMetricsRepo struct {
-	designName       string
-	designErr        error
-	fabrics          []*store.FabricRecord
-	deviceModels     map[int64]*models.DeviceModel
-	capacitySummary  *models.CapacitySummary
-	capacityErr      error
-	totalDrawW       int
-	totalCapacityW   int
-	powerErr         error
+	designName     string
+	designErr      error
+	capacitySummary *models.CapacitySummary
+	capacityErr    error
+	totalDrawW     int
+	totalCapacityW int
+	powerErr       error
 }
 
 func (r *fakeMetricsRepo) GetDesignName(_ int64) (string, error) {
 	return r.designName, r.designErr
-}
-
-func (r *fakeMetricsRepo) ListFabricsByDesign(_ int64) ([]*store.FabricRecord, error) {
-	return r.fabrics, nil
-}
-
-func (r *fakeMetricsRepo) GetDeviceModelByID(id int64) (*models.DeviceModel, error) {
-	dm, ok := r.deviceModels[id]
-	if !ok {
-		return nil, models.ErrNotFound
-	}
-	return dm, nil
 }
 
 func (r *fakeMetricsRepo) QueryDesignCapacity(_ int64) (*models.CapacitySummary, error) {
@@ -54,35 +39,49 @@ func (r *fakeMetricsRepo) QueryDesignPowerAndRacks(_ int64) (int, int, error) {
 
 func newFakeMetricsRepo() *fakeMetricsRepo {
 	return &fakeMetricsRepo{
-		designName:   "test-design",
-		deviceModels: make(map[int64]*models.DeviceModel),
+		designName: "test-design",
 	}
 }
 
-func makeFabricRecord(id, designID int64, stages, radix int, oversubscription float64) *store.FabricRecord {
-	return &store.FabricRecord{
-		Fabric: models.Fabric{
-			ID:       id,
-			DesignID: designID,
-			Name:     "fabric-" + string(rune('0'+id)),
-			Tier:     models.FabricTierFrontEnd,
-		},
-		Stages:           stages,
-		Radix:            radix,
-		Oversubscription: oversubscription,
+// fakeDeriveFabric implements service.metricsDeriveFabric for testing.
+type fakeDeriveFabric struct {
+	df  *service.DerivedFabric
+	err error
+}
+
+func (f *fakeDeriveFabric) DeriveFabric(_ int64, _ models.NetworkPlane) (*service.DerivedFabric, error) {
+	return f.df, f.err
+}
+
+// derivedFabricWithTopology returns a DerivedFabric with a topology for the given stages/radix/oversub.
+func derivedFabricWithTopology(designID int64, stages, radix int, oversubscription float64) *service.DerivedFabric {
+	topo, err := service.CalculateTopology(stages, radix, oversubscription)
+	if err != nil {
+		panic(err)
+	}
+	tiers := []service.DerivedTier{
+		{ScopeType: models.ScopeBlock, ScopeID: 1, ScopeName: "row-A", SpineCount: topo.SpineCount, PortCount: radix},
+	}
+	return &service.DerivedFabric{
+		DesignID: designID,
+		Plane:    models.PlaneFrontEnd,
+		Stages:   topo.Stages,
+		Topology: topo,
+		Tiers:    tiers,
 	}
 }
 
 func TestMetricsService_GetDesignMetrics_empty(t *testing.T) {
 	repo := newFakeMetricsRepo()
-	svc := service.NewMetricsService(repo)
+	derive := &fakeDeriveFabric{df: &service.DerivedFabric{DesignID: 1, Plane: models.PlaneFrontEnd, Stages: 2}}
+	svc := service.NewMetricsService(repo, derive)
 
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !m.Empty {
-		t.Error("expected Empty=true for design with no fabrics or devices")
+		t.Error("expected Empty=true for design with no tiers or devices")
 	}
 	if len(m.Fabrics) != 0 {
 		t.Errorf("expected 0 fabric entries, got %d", len(m.Fabrics))
@@ -92,7 +91,8 @@ func TestMetricsService_GetDesignMetrics_empty(t *testing.T) {
 func TestMetricsService_GetDesignMetrics_notFound(t *testing.T) {
 	repo := newFakeMetricsRepo()
 	repo.designErr = models.ErrNotFound
-	svc := service.NewMetricsService(repo)
+	derive := &fakeDeriveFabric{df: &service.DerivedFabric{DesignID: 42, Plane: models.PlaneFrontEnd, Stages: 2}}
+	svc := service.NewMetricsService(repo, derive)
 
 	_, err := svc.GetDesignMetrics(42)
 	if err == nil {
@@ -103,9 +103,9 @@ func TestMetricsService_GetDesignMetrics_notFound(t *testing.T) {
 func TestMetricsService_GetDesignMetrics_2stage(t *testing.T) {
 	repo := newFakeMetricsRepo()
 	// 2-stage fabric: radix=32, oversubscription=3 → uplinks=8, downlinks=24
-	repo.fabrics = []*store.FabricRecord{makeFabricRecord(1, 1, 2, 32, 3.0)}
+	derive := &fakeDeriveFabric{df: derivedFabricWithTopology(1, 2, 32, 3.0)}
+	svc := service.NewMetricsService(repo, derive)
 
-	svc := service.NewMetricsService(repo)
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -132,9 +132,9 @@ func TestMetricsService_GetDesignMetrics_2stage(t *testing.T) {
 func TestMetricsService_GetDesignMetrics_3stage(t *testing.T) {
 	repo := newFakeMetricsRepo()
 	// 3-stage fabric: radix=32, oversubscription=3
-	repo.fabrics = []*store.FabricRecord{makeFabricRecord(2, 1, 3, 32, 3.0)}
+	derive := &fakeDeriveFabric{df: derivedFabricWithTopology(1, 3, 32, 3.0)}
+	svc := service.NewMetricsService(repo, derive)
 
-	svc := service.NewMetricsService(repo)
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -159,11 +159,11 @@ func TestMetricsService_GetDesignMetrics_3stage(t *testing.T) {
 
 func TestMetricsService_GetDesignMetrics_powerZeroCapacity(t *testing.T) {
 	repo := newFakeMetricsRepo()
-	// Zero capacity — utilization should be 0, not a divide-by-zero.
 	repo.totalDrawW = 100
 	repo.totalCapacityW = 0
+	derive := &fakeDeriveFabric{df: &service.DerivedFabric{DesignID: 1, Plane: models.PlaneFrontEnd, Stages: 2}}
 
-	svc := service.NewMetricsService(repo)
+	svc := service.NewMetricsService(repo, derive)
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -175,13 +175,10 @@ func TestMetricsService_GetDesignMetrics_powerZeroCapacity(t *testing.T) {
 
 func TestMetricsService_GetDesignMetrics_chokePoint(t *testing.T) {
 	repo := newFakeMetricsRepo()
-	// Two fabrics: one 3:1, one 2:1 oversubscription
-	repo.fabrics = []*store.FabricRecord{
-		makeFabricRecord(1, 1, 2, 32, 3.0), // oversubscription 3:1
-		makeFabricRecord(2, 1, 2, 32, 2.0), // oversubscription 2:1 (radix snaps to 33→36 for divisor 3)
-	}
+	// 2-stage, radix=32, oversub=3 → leaf→spine oversub=3.0
+	derive := &fakeDeriveFabric{df: derivedFabricWithTopology(1, 2, 32, 3.0)}
 
-	svc := service.NewMetricsService(repo)
+	svc := service.NewMetricsService(repo, derive)
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -190,8 +187,8 @@ func TestMetricsService_GetDesignMetrics_chokePoint(t *testing.T) {
 	if m.ChokePoint == nil {
 		t.Fatal("expected a choke point, got nil")
 	}
-	if m.ChokePoint.FabricID != 1 {
-		t.Errorf("expected choke point at fabric 1 (3:1), got fabric %d", m.ChokePoint.FabricID)
+	if m.ChokePoint.Ratio != 3.0 {
+		t.Errorf("expected choke point ratio=3.0, got %f", m.ChokePoint.Ratio)
 	}
 }
 
@@ -199,8 +196,9 @@ func TestMetricsService_GetDesignMetrics_powerMetrics(t *testing.T) {
 	repo := newFakeMetricsRepo()
 	repo.totalDrawW = 5000
 	repo.totalCapacityW = 10000
+	derive := &fakeDeriveFabric{df: &service.DerivedFabric{DesignID: 1, Plane: models.PlaneFrontEnd, Stages: 2}}
 
-	svc := service.NewMetricsService(repo)
+	svc := service.NewMetricsService(repo, derive)
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -220,9 +218,9 @@ func TestMetricsService_GetDesignMetrics_powerMetrics(t *testing.T) {
 func TestMetricsService_GetDesignMetrics_portUtilization(t *testing.T) {
 	repo := newFakeMetricsRepo()
 	// 2-stage, radix=32, oversubscription=3 → uplinks=8, downlinks=24
-	repo.fabrics = []*store.FabricRecord{makeFabricRecord(1, 1, 2, 32, 3.0)}
+	derive := &fakeDeriveFabric{df: derivedFabricWithTopology(1, 2, 32, 3.0)}
 
-	svc := service.NewMetricsService(repo)
+	svc := service.NewMetricsService(repo, derive)
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -260,8 +258,9 @@ func TestMetricsService_GetDesignMetrics_capacityResources(t *testing.T) {
 		TotalGPUCount:  8,
 		DeviceCount:    4,
 	}
+	derive := &fakeDeriveFabric{df: &service.DerivedFabric{DesignID: 1, Plane: models.PlaneFrontEnd, Stages: 2}}
 
-	svc := service.NewMetricsService(repo)
+	svc := service.NewMetricsService(repo, derive)
 	m, err := svc.GetDesignMetrics(1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

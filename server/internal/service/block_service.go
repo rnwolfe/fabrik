@@ -292,6 +292,42 @@ func (s *BlockService) ListAggregationSummaries(blockID int64) ([]*models.TierAg
 	return out, nil
 }
 
+// AssignSuperBlockAggregation assigns an aggregation device model to a super-block for a given plane.
+// If the super-block already has an agg for this plane, it is replaced.
+func (s *BlockService) AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error) {
+	dm, err := s.repo.GetDeviceModel(deviceModelID)
+	if err != nil {
+		return nil, fmt.Errorf("get device model %d: %w", deviceModelID, err)
+	}
+
+	agg, err := s.repo.SetAggregation(&models.TierAggregation{
+		ScopeType:     models.ScopeSuperBlock,
+		ScopeID:       superBlockID,
+		Plane:         plane,
+		DeviceModelID: deviceModelID,
+		SpineCount:    spineCount,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("set super-block aggregation: %w", err)
+	}
+
+	slog.Info("super-block aggregation assigned", "superBlockID", superBlockID, "plane", plane, "deviceModelID", deviceModelID, "spineCount", spineCount)
+	return s.buildAggSummary(agg, dm)
+}
+
+// GetSuperBlockAggregationSummary returns the aggregation summary for a (superBlockID, plane) pair.
+func (s *BlockService) GetSuperBlockAggregationSummary(superBlockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error) {
+	agg, err := s.repo.GetAggregation(models.ScopeSuperBlock, superBlockID, plane)
+	if err != nil {
+		return nil, fmt.Errorf("get aggregation for super-block %d plane %s: %w", superBlockID, plane, err)
+	}
+	dm, err := s.repo.GetDeviceModel(agg.DeviceModelID)
+	if err != nil {
+		return nil, fmt.Errorf("get device model %d: %w", agg.DeviceModelID, err)
+	}
+	return s.buildAggSummary(agg, dm)
+}
+
 // DeleteAggregation removes the aggregation for (blockID, plane) and all associated port connections.
 func (s *BlockService) DeleteAggregation(blockID int64, plane models.NetworkPlane) error {
 	if err := s.repo.DeleteAggregation(models.ScopeBlock, blockID, plane); err != nil {

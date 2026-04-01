@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes on mux.
-func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler, blocks *handlers.BlockHandler, management *handlers.ManagementHandler, capacity *handlers.CapacityHandler, metrics *handlers.MetricsHandler) {
+func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler, blocks *handlers.BlockHandler, management *handlers.ManagementHandler, capacity *handlers.CapacityHandler, metrics *handlers.MetricsHandler, deriveFabric *handlers.DeriveFabricHandler) {
 	// Design CRUD
 	mux.HandleFunc("POST /api/designs", designs.Create)
 	mux.HandleFunc("GET /api/designs", designs.List)
@@ -64,6 +64,9 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("POST /api/blocks/add-rack", blocks.AddRackToBlock)
 	mux.HandleFunc("DELETE /api/block-racks/{rack_id}", blocks.RemoveRackFromBlock)
 
+	mux.HandleFunc("PUT /api/super-blocks/{id}/aggregations/{plane}", blocks.AssignSuperBlockAggregation)
+	mux.HandleFunc("GET /api/super-blocks/{id}/aggregations/{plane}", blocks.GetSuperBlockAggregation)
+
 	mux.HandleFunc("PUT /api/blocks/{block_id}/management-agg", management.SetManagementAgg)
 	mux.HandleFunc("GET /api/blocks/{block_id}/management-agg", management.GetManagementAgg)
 	mux.HandleFunc("DELETE /api/blocks/{block_id}/management-agg", management.RemoveManagementAgg)
@@ -73,4 +76,7 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 
 	// Design metrics
 	mux.HandleFunc("GET /api/designs/{id}/metrics", metrics.GetDesignMetrics)
+
+	// Derived fabric topology (computed from hierarchy; authoritative source for topology metrics)
+	mux.HandleFunc("GET /api/designs/{id}/fabric", deriveFabric.GetDerivedFabric)
 }

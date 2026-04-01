@@ -41,3 +41,9 @@ playwright-report/
 *.db-wal
 *.db-shm
 tmp/
+
+# Git worktrees (managed by Claude Code)
+.worktrees/
+
+# Legacy Angular frontend
+frontend-angular/

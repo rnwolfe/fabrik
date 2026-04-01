@@ -17,11 +17,15 @@ type BlockService interface {
 	GetBlock(id int64) (*models.Block, error)
 	ListBlocks(superBlockID int64) ([]*models.Block, error)
 
-	// Aggregation operations
+	// Aggregation operations (block-level)
 	AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error)
 	GetAggregationSummary(blockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error)
 	ListAggregationSummaries(blockID int64) ([]*models.TierAggregationSummary, error)
 	DeleteAggregation(blockID int64, plane models.NetworkPlane) error
+
+	// Aggregation operations (super-block-level)
+	AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error)
+	GetSuperBlockAggregationSummary(superBlockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error)
 
 	// Rack placement
 	AddRackToBlock(rackID int64, blockID *int64, superBlockID int64) (*models.AddRackToBlockResult, error)
@@ -337,6 +341,68 @@ func (h *BlockHandler) ListPortConnections(w http.ResponseWriter, r *http.Reques
 		conns = []*models.TierPortConnection{}
 	}
 	writeJSON(w, http.StatusOK, conns)
+}
+
+// AssignSuperBlockAggregation handles PUT /api/super-blocks/{id}/aggregations/{plane}.
+func (h *BlockHandler) AssignSuperBlockAggregation(w http.ResponseWriter, r *http.Request) {
+	superBlockID, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	planeStr := r.PathValue("plane")
+	plane, ok := parsePlane(w, planeStr)
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req assignAggregationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	summary, err := h.svc.AssignSuperBlockAggregation(superBlockID, plane, req.DeviceModelID, req.SpineCount)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		slog.Error("assign super-block aggregation", "err", err, "superBlockID", superBlockID, "plane", plane)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
+// GetSuperBlockAggregation handles GET /api/super-blocks/{id}/aggregations/{plane}.
+func (h *BlockHandler) GetSuperBlockAggregation(w http.ResponseWriter, r *http.Request) {
+	superBlockID, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	planeStr := r.PathValue("plane")
+	plane, ok := parsePlane(w, planeStr)
+	if !ok {
+		return
+	}
+
+	summary, err := h.svc.GetSuperBlockAggregationSummary(superBlockID, plane)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "aggregation not found")
+			return
+		}
+		slog.Error("get super-block aggregation", "err", err, "superBlockID", superBlockID, "plane", plane)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 // parsePlane parses a network plane string from a path variable.

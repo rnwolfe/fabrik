@@ -87,6 +87,18 @@ For leaf-spine fabrics, all leaf-to-spine uplinks should be **equal length** to 
 
 For within-rack and top-of-rack connections, DAC cables are the most cost-effective. Cross-row and inter-pod connections typically use fiber.
 
+### Port Breakout Cabling
+
+High-speed switch ports can be broken out to serve multiple lower-speed endpoints. Breakout ratio is determined by the physical interface type:
+
+| Switch port | Breakout options | Resulting server ports |
+|-------------|-----------------|----------------------|
+| 400G QSFP-DD | 2×200G, 4×100G | 2 or 4 per switch port |
+| 100G QSFP28 | 4×25G | 4 per switch port |
+| 40G QSFP+ | 4×10G | 4 per switch port |
+
+**Effective server density** = leaf downlink ports × breakout ratio. A 32-port 400G leaf switch using 4×100G breakout serves up to 128 servers. The switch port count is the physical ceiling; actual server connections depend on NIC speed and cabling choice.
+
 ## Weight and Floor Loading
 
 - Standard 42U rack: 700–1500 lbs when fully populated.
