@@ -79,10 +79,12 @@ export default function RackElevation({ rackId }: RackElevationProps) {
   }
   if (!rack) return null;
 
-  // Build a map of position → device for rendering
-  const devicesByPos = new Map<number, DeviceSummary>();
+  // Build a map of top-slot → device for rendering.
+  // position = bottom U slot (lowest number); top slot = position + height_u - 1.
+  // We render the device block at the top slot so multi-U devices expand downward.
+  const devicesByTopSlot = new Map<number, DeviceSummary>();
   for (const dev of rack.devices ?? []) {
-    devicesByPos.set(dev.position, dev);
+    devicesByTopSlot.set(dev.position + dev.height_u - 1, dev);
   }
 
   const heightU = rack.height_u;
@@ -129,12 +131,12 @@ export default function RackElevation({ rackId }: RackElevationProps) {
           <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider text-center">Top of Rack</p>
         </div>
 
-        {/* U slots — rendered top to bottom (position 1 = top) */}
+        {/* U slots — rendered top to bottom (highest U = top, matching physical rack convention) */}
         <div className="flex flex-col">
-          {Array.from({ length: heightU }, (_, i) => i + 1).map((u) => {
-            const dev = devicesByPos.get(u);
+          {Array.from({ length: heightU }, (_, i) => heightU - i).map((u) => {
+            const dev = devicesByTopSlot.get(u);
             if (dev) {
-              // Device occupies this slot — render it spanning its height
+              // Render device block at its top slot; block expands downward by height_u
               const colorClass = ROLE_COLORS[dev.role] ?? ROLE_COLORS.other;
               return (
                 <div
@@ -149,9 +151,9 @@ export default function RackElevation({ rackId }: RackElevationProps) {
                 </div>
               );
             }
-            // Check if this U is covered by a multi-U device starting above
-            const coveredBy = Array.from(devicesByPos.entries()).find(
-              ([pos, d]) => pos < u && pos + d.height_u > u
+            // Check if this U is covered by a multi-U device whose top slot is above
+            const coveredBy = Array.from(devicesByTopSlot.entries()).find(
+              ([topSlot, d]) => topSlot > u && d.position <= u
             );
             if (coveredBy) return null; // rendered as part of the device block above
 

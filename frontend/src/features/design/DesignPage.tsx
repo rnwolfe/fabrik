@@ -251,6 +251,8 @@ export default function DesignPage() {
       queryClient.invalidateQueries({ queryKey: ['blocks'] });
       queryClient.invalidateQueries({ queryKey: ['racks'] });
       queryClient.invalidateQueries({ queryKey: ['aggs'] });
+      setSelectedBlockId(null);
+      setSelectedRackId(null);
     },
   });
 

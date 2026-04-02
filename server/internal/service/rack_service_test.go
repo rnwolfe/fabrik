@@ -251,6 +251,13 @@ func (r *fakeRackRepo) RemoveDevicesByRole(rackID int64, role models.DeviceRole)
 	return nil
 }
 
+// helper: place a device directly into the fake repo without going through the service.
+func (r *fakeRackRepo) seedDevice(d *models.Device) {
+	r.nextDeviceID++
+	d.ID = r.nextDeviceID
+	r.devices[d.ID] = d
+}
+
 // --- Tests ---
 
 func newRackSvc() (*service.RackService, *fakeRackTypeRepo, *fakeRackRepo) {
@@ -982,4 +989,109 @@ func TestRackService_UpdateRackType_PowerOversubValidation(t *testing.T) {
 	if !errors.Is(err, models.ErrConstraintViolation) {
 		t.Errorf("expected ErrConstraintViolation for warn > 500, got %v", err)
 	}
+}
+
+func TestRackService_PlaceServerDevices(t *testing.T) {
+	setup := func() (*service.RackService, *fakeRackRepo, int64, int64) {
+		svc, _, rr := newRackSvc()
+		serverModelID := rr.addDeviceModel(&models.DeviceModel{
+			Vendor: "Dell", Model: "R750", HeightU: 1,
+			DeviceModelType: "server", PortCount: 2,
+		})
+		leafModelID := rr.addDeviceModel(&models.DeviceModel{
+			Vendor: "Arista", Model: "7050", HeightU: 1,
+			DeviceModelType: "leaf",
+		})
+		rack, _ := rr.Create(&models.Rack{Name: "compute-1", HeightU: 10, PowerCapacityW: 10000})
+		// Seed two leaf devices at the top (positions 9 and 10).
+		rr.seedDevice(&models.Device{RackID: rack.ID, DeviceModelID: leafModelID, Name: "leaf-1a", Role: models.DeviceRoleLeaf, Position: 10})
+		rr.seedDevice(&models.Device{RackID: rack.ID, DeviceModelID: leafModelID, Name: "leaf-1b", Role: models.DeviceRoleLeaf, Position: 9})
+		return svc, rr, rack.ID, serverModelID
+	}
+
+	t.Run("negative count returns constraint error", func(t *testing.T) {
+		svc, _, rackID, modelID := setup()
+		err := svc.PlaceServerDevices(rackID, modelID, -1)
+		if !errors.Is(err, models.ErrConstraintViolation) {
+			t.Errorf("expected ErrConstraintViolation, got %v", err)
+		}
+	})
+
+	t.Run("rack not found", func(t *testing.T) {
+		svc, _, _, modelID := setup()
+		err := svc.PlaceServerDevices(9999, modelID, 1)
+		if !errors.Is(err, models.ErrNotFound) {
+			t.Errorf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("places servers skipping leaf slots", func(t *testing.T) {
+		svc, rr, rackID, modelID := setup()
+		if err := svc.PlaceServerDevices(rackID, modelID, 3); err != nil {
+			t.Fatalf("PlaceServerDevices: %v", err)
+		}
+		devs, _ := rr.ListDevicesInRack(rackID)
+		servers := 0
+		for _, d := range devs {
+			if d.Role == models.DeviceRoleServer {
+				servers++
+				if d.Position == 9 || d.Position == 10 {
+					t.Errorf("server placed at leaf position %d", d.Position)
+				}
+			}
+		}
+		if servers != 3 {
+			t.Errorf("expected 3 servers, got %d", servers)
+		}
+	})
+
+	t.Run("replaces existing servers on re-place", func(t *testing.T) {
+		svc, rr, rackID, modelID := setup()
+		_ = svc.PlaceServerDevices(rackID, modelID, 5)
+		if err := svc.PlaceServerDevices(rackID, modelID, 2); err != nil {
+			t.Fatalf("second PlaceServerDevices: %v", err)
+		}
+		devs, _ := rr.ListDevicesInRack(rackID)
+		servers := 0
+		for _, d := range devs {
+			if d.Role == models.DeviceRoleServer {
+				servers++
+			}
+		}
+		if servers != 2 {
+			t.Errorf("expected 2 servers after re-place, got %d", servers)
+		}
+	})
+
+	t.Run("count zero removes all servers", func(t *testing.T) {
+		svc, rr, rackID, modelID := setup()
+		_ = svc.PlaceServerDevices(rackID, modelID, 3)
+		if err := svc.PlaceServerDevices(rackID, modelID, 0); err != nil {
+			t.Fatalf("PlaceServerDevices(0): %v", err)
+		}
+		devs, _ := rr.ListDevicesInRack(rackID)
+		for _, d := range devs {
+			if d.Role == models.DeviceRoleServer {
+				t.Error("expected no servers after count=0, found one")
+			}
+		}
+	})
+
+	t.Run("truncates when rack is full", func(t *testing.T) {
+		svc, rr, rackID, modelID := setup()
+		// 10U rack, 2 slots occupied by leaves → 8 free; request more than fit.
+		if err := svc.PlaceServerDevices(rackID, modelID, 100); err != nil {
+			t.Fatalf("PlaceServerDevices with overflow: %v", err)
+		}
+		devs, _ := rr.ListDevicesInRack(rackID)
+		servers := 0
+		for _, d := range devs {
+			if d.Role == models.DeviceRoleServer {
+				servers++
+			}
+		}
+		if servers != 8 {
+			t.Errorf("expected 8 servers (rack full), got %d", servers)
+		}
+	})
 }

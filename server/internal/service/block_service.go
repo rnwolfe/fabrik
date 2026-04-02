@@ -613,6 +613,9 @@ func (s *BlockService) PlaceSpineDevices(blockID, spineModelID int64, count int)
 
 // DeleteBlock removes a block and all its racks, devices, and aggregations.
 func (s *BlockService) DeleteBlock(id int64) error {
+	if _, err := s.repo.GetBlock(id); err != nil {
+		return fmt.Errorf("get block %d: %w", id, err)
+	}
 	racks, err := s.repo.ListRacksInBlock(id)
 	if err != nil {
 		return fmt.Errorf("list racks in block %d: %w", id, err)

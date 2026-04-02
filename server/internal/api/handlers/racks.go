@@ -508,6 +508,10 @@ func (h *RackHandler) PlaceServerDevices(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
+		if errors.Is(err, models.ErrRUOverflow) || errors.Is(err, models.ErrPositionOverlap) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		slog.Error("place server devices", "err", err, "rackID", rackID)
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return

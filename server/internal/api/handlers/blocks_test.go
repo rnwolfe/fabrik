@@ -577,6 +577,39 @@ func TestBlockHandler_PlaceSpineDevices(t *testing.T) {
 	})
 }
 
+func TestBlockHandler_DeleteBlock(t *testing.T) {
+	svc := newFakeBlockSvc()
+	h := handlers.NewBlockHandler(svc)
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
+
+	t.Run("success", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodDelete, "/api/blocks/1", nil)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.DeleteBlock), r)
+		if w.Code != http.StatusNoContent {
+			t.Errorf("expected 204, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodDelete, "/api/blocks/9999", nil)
+		r.SetPathValue("id", "9999")
+		w := blockResponse(t, http.HandlerFunc(h.DeleteBlock), r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("invalid id", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodDelete, "/api/blocks/abc", nil)
+		r.SetPathValue("id", "abc")
+		w := blockResponse(t, http.HandlerFunc(h.DeleteBlock), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+}
+
 // Verify fakeBlockService satisfies the handlers.BlockService interface.
 var _ handlers.BlockService = (*fakeBlockService)(nil)
 

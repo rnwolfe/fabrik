@@ -663,7 +663,7 @@ func (s *RackService) RemoveDevice(rackID, deviceID int64, compact bool) error {
 // Servers are placed from position 1 upward, stacking sequentially.
 func (s *RackService) PlaceServerDevices(rackID, serverModelID int64, count int) error {
 	if count < 0 {
-		count = 0
+		return fmt.Errorf("%w: count must be >= 0", models.ErrConstraintViolation)
 	}
 	rack, err := s.rackRepo.Get(rackID)
 	if err != nil {
