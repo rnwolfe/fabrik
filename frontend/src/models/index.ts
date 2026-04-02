@@ -1,4 +1,5 @@
 export type DeviceRole = 'spine' | 'leaf' | 'super_spine' | 'server' | 'other' | 'management_tor' | 'management_agg';
+export type RackRole = 'compute' | 'base';
 export type DeviceModelType = 'network' | 'server' | 'storage' | 'other';
 export type PortType = 'ethernet' | 'fiber' | 'dac' | 'other';
 export type FabricTier = 'frontend' | 'backend';
@@ -295,6 +296,7 @@ export interface RackSummary {
   block_id?: number;
   rack_type_id?: number;
   name: string;
+  role: RackRole;
   height_u: number;
   power_capacity_w: number;
   description: string;

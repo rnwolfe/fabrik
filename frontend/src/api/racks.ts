@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { RackSummary, RackType } from '@/models';
+import type { RackSummary, RackType, RackRole } from '@/models';
 
 export interface RackInput {
   name: string;
@@ -8,6 +8,7 @@ export interface RackInput {
   block_id?: number;
   height_u?: number;
   power_capacity_w?: number;
+  role?: RackRole;
 }
 
 export interface RackTypeInput {

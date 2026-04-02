@@ -37,6 +37,8 @@ type BlockRepository interface {
 	// Support queries
 	GetDeviceModel(id int64) (*models.DeviceModel, error)
 	ListDevicesInRack(rackID int64) ([]*models.Device, error)
+	ListRacksInBlock(blockID int64) ([]*models.Rack, error)
+	RemoveDevicesByRackAndRole(rackID int64, role models.DeviceRole) error
 	UpdateRackBlock(rackID int64, blockID *int64) error
 	GetRack(id int64) (*models.Rack, error)
 }
@@ -92,29 +94,33 @@ func (s *BlockService) CreateBlock(superBlockID int64, name, description string,
 		}
 	}
 
-	// Auto-create 2 base racks with redundant ToR leaf pairs.
+	// Auto-create 4 racks: 2 base racks (Net-1, Net-2) + 2 compute racks (Rack-1, Rack-2).
 	const defaultRackHeightU = 42
 	const defaultPowerCapacityW = 10000
-	const baseRackCount = 2
 	const leavesPerRack = 2
 
-	racks := make([]*models.Rack, 0, baseRackCount)
-	for i := 1; i <= baseRackCount; i++ {
+	racks := make([]*models.Rack, 0, 4)
+
+	// Create 2 base racks (network infra).
+	baseRacks := make([]*models.Rack, 0, 2)
+	for i := 1; i <= 2; i++ {
 		rack, err := s.repo.CreateRack(&models.Rack{
 			BlockID:        &b.ID,
-			Name:           fmt.Sprintf("Rack %d", i),
+			Name:           fmt.Sprintf("Net-%d", i),
+			Role:           models.RackRoleBase,
 			HeightU:        defaultRackHeightU,
 			PowerCapacityW: defaultPowerCapacityW,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("create rack %d: %w", i, err)
+			return nil, fmt.Errorf("create base rack %d: %w", i, err)
 		}
+		baseRacks = append(baseRacks, rack)
 		racks = append(racks, rack)
 
 		// Place 2 leaf devices at the top of the rack (top-down).
-		pos := defaultRackHeightU // top U position (1-indexed)
+		pos := defaultRackHeightU
 		for j := 0; j < leavesPerRack; j++ {
-			leafName := fmt.Sprintf("leaf-%d%c", i, 'a'+j) // leaf-1a, leaf-1b, leaf-2a, leaf-2b
+			leafName := fmt.Sprintf("leaf-%d%c", i, 'a'+j)
 			_, err := s.repo.PlaceDevice(&models.Device{
 				RackID:        rack.ID,
 				DeviceModelID: leafModel.ID,
@@ -128,12 +134,10 @@ func (s *BlockService) CreateBlock(superBlockID int64, name, description string,
 			pos -= leafModel.HeightU
 		}
 
-		// Place spine devices round-robin across racks.
+		// Place spine devices in base racks only, alternating HA.
 		if spineModel != nil && spineCount > 0 {
 			for si := 0; si < spineCount; si++ {
-				// Round-robin: spine si goes to rack (si % baseRackCount).
-				targetRack := si % baseRackCount
-				if targetRack != i-1 {
+				if si%2 != i-1 {
 					continue
 				}
 				spineName := fmt.Sprintf("spine-%d", si+1)
@@ -149,6 +153,38 @@ func (s *BlockService) CreateBlock(superBlockID int64, name, description string,
 				}
 				pos -= spineModel.HeightU
 			}
+		}
+	}
+
+	// Create 2 compute racks.
+	for i := 1; i <= 2; i++ {
+		rack, err := s.repo.CreateRack(&models.Rack{
+			BlockID:        &b.ID,
+			Name:           fmt.Sprintf("Rack-%d", i),
+			Role:           models.RackRoleCompute,
+			HeightU:        defaultRackHeightU,
+			PowerCapacityW: defaultPowerCapacityW,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("create compute rack %d: %w", i, err)
+		}
+		racks = append(racks, rack)
+
+		// Place 2 leaf devices at the top of each compute rack.
+		pos := defaultRackHeightU
+		for j := 0; j < leavesPerRack; j++ {
+			leafName := fmt.Sprintf("leaf-%d%c", i+2, 'a'+j) // leaf-3a, leaf-3b, etc.
+			_, err := s.repo.PlaceDevice(&models.Device{
+				RackID:        rack.ID,
+				DeviceModelID: leafModel.ID,
+				Name:          leafName,
+				Role:          models.DeviceRoleLeaf,
+				Position:      pos,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("place leaf %s: %w", leafName, err)
+			}
+			pos -= leafModel.HeightU
 		}
 	}
 
@@ -493,6 +529,84 @@ func (s *BlockService) ListPortConnections(blockID int64, plane models.NetworkPl
 		return nil, fmt.Errorf("list port connections for agg %d: %w", agg.ID, err)
 	}
 	return conns, nil
+}
+
+// PlaceSpineDevices places count spine devices (using spineModelID) across the base racks in the block.
+// Existing spine-role devices in target racks are removed first. If the block has no base racks,
+// all racks are used as a fallback for backward compatibility.
+func (s *BlockService) PlaceSpineDevices(blockID, spineModelID int64, count int) error {
+	if count < 0 {
+		count = 0
+	}
+
+	spineModel, err := s.repo.GetDeviceModel(spineModelID)
+	if err != nil {
+		return fmt.Errorf("get spine model %d: %w", spineModelID, err)
+	}
+
+	allRacks, err := s.repo.ListRacksInBlock(blockID)
+	if err != nil {
+		return fmt.Errorf("list racks in block %d: %w", blockID, err)
+	}
+
+	// Filter to base racks; fall back to all racks if none exist.
+	var targetRacks []*models.Rack
+	for _, r := range allRacks {
+		if r.Role == models.RackRoleBase {
+			targetRacks = append(targetRacks, r)
+		}
+	}
+	if len(targetRacks) == 0 {
+		targetRacks = allRacks
+	}
+
+	if len(targetRacks) == 0 {
+		return nil // nothing to do
+	}
+
+	// Remove all existing spine devices from ALL racks in the block to avoid
+	// stale spines remaining in compute racks (e.g. from a previous fallback pass).
+	for _, r := range allRacks {
+		if err := s.repo.RemoveDevicesByRackAndRole(r.ID, models.DeviceRoleSpine); err != nil {
+			return fmt.Errorf("remove spine devices from rack %d: %w", r.ID, err)
+		}
+	}
+
+	// Distribute count spine devices across target racks alternating HA.
+	for si := 0; si < count; si++ {
+		rack := targetRacks[si%len(targetRacks)]
+
+		// Find position: place below the lowest-positioned device in the rack.
+		// Initialize to HeightU+1 so an exact match at HeightU is still caught.
+		devices, err := s.repo.ListDevicesInRack(rack.ID)
+		if err != nil {
+			return fmt.Errorf("list devices in rack %d: %w", rack.ID, err)
+		}
+		pos := rack.HeightU + 1
+		for _, d := range devices {
+			if d.Position <= pos {
+				pos = d.Position - 1
+			}
+		}
+		if pos < 1 {
+			pos = 1
+		}
+
+		spineName := fmt.Sprintf("spine-%d", si+1)
+		_, err = s.repo.PlaceDevice(&models.Device{
+			RackID:        rack.ID,
+			DeviceModelID: spineModel.ID,
+			Name:          spineName,
+			Role:          models.DeviceRoleSpine,
+			Position:      pos,
+		})
+		if err != nil {
+			return fmt.Errorf("place spine %s in rack %d: %w", spineName, rack.ID, err)
+		}
+	}
+
+	slog.Info("spine devices placed", "blockID", blockID, "spineModelID", spineModelID, "count", count)
+	return nil
 }
 
 // --- helpers ---

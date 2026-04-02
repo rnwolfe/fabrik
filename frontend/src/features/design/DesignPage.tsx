@@ -51,6 +51,7 @@ const addRackSchema = z.object({
     (v) => (v === '' || v == null ? undefined : Number(v)),
     z.number().int().optional()
   ),
+  role: z.enum(['compute', 'base']).default('compute'),
 });
 type AddRackForm = z.infer<typeof addRackSchema>;
 
@@ -193,7 +194,7 @@ export default function DesignPage() {
   });
 
   const addRackMutation = useMutation({
-    mutationFn: async ({ blockId, name, rackTypeId }: { blockId: number; name: string; rackTypeId?: number }) => {
+    mutationFn: async ({ blockId, name, rackTypeId, role }: { blockId: number; name: string; rackTypeId?: number; role?: 'compute' | 'base' }) => {
       // First create the rack
       const rt = rackTypeId ? rackTypes?.find((t) => t.id === rackTypeId) : null;
       const rack = await racksApi.create({
@@ -201,6 +202,7 @@ export default function DesignPage() {
         rack_type_id: rackTypeId,
         height_u: rt?.height_u ?? 42,
         power_capacity_w: rt?.power_capacity_w ?? 10000,
+        role: role ?? 'compute',
       });
       // Then add it to the block
       await blocksApi.addRack({ rack_id: rack.id, block_id: blockId });
@@ -231,6 +233,14 @@ export default function DesignPage() {
     },
   });
 
+  const placeSpineDevicesMutation = useMutation({
+    mutationFn: ({ blockId, deviceModelId, count }: { blockId: number; deviceModelId: number; count: number }) =>
+      blocksApi.placeSpineDevices(blockId, deviceModelId, count),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+    },
+  });
+
   // ── Forms ────────────────────────────────────────────────────────────────
 
   const {
@@ -247,10 +257,14 @@ export default function DesignPage() {
     register: rackRegister,
     handleSubmit: rackHandleSubmit,
     reset: rackReset,
+    setValue: rackSetValue,
+    watch: rackWatch,
   } = useForm<AddRackForm>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(addRackSchema) as any,
+    defaultValues: { role: 'compute' },
   });
+  const rackRole = rackWatch('role');
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -269,22 +283,27 @@ export default function DesignPage() {
       blockId: rackDialogBlockId,
       name: data.name,
       rackTypeId: data.rack_type_id,
+      role: data.role,
     });
   });
 
   const handleAssignSpine = useCallback(
-    (blockId: number, deviceModelId: number) => {
+    (blockId: number, deviceModelId: number, initialSpineCount: number) => {
+      // Use the count BlockDetailPanel computed as the default (port-group aware).
+      // Avoids persisting 0 when the user hasn't touched the stepper yet.
+      const count = blockSpineCount.get(blockId) ?? initialSpineCount;
       setBlockSpineModel((prev) => new Map(prev).set(blockId, deviceModelId));
+      setBlockSpineCount((prev) => prev.has(blockId) ? prev : new Map(prev).set(blockId, count));
       if (!selectedBlock) return;
-      const effectiveSpineCount = blockSpineCount.get(blockId) ?? 0;
       saveSpineAggMutation.mutate({
         superBlockId: selectedBlock.super_block_id,
         plane: 'front_end',
         deviceModelId,
-        spineCount: effectiveSpineCount,
+        spineCount: count,
       });
+      placeSpineDevicesMutation.mutate({ blockId, deviceModelId, count });
     },
-    [selectedBlock, blockSpineCount, saveSpineAggMutation]
+    [selectedBlock, blockSpineCount, saveSpineAggMutation, placeSpineDevicesMutation]
   );
 
   const spineCountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -304,8 +323,13 @@ export default function DesignPage() {
         deviceModelId: effectiveSpineModelId,
         spineCount: value,
       });
+      placeSpineDevicesMutation.mutate({
+        blockId,
+        deviceModelId: effectiveSpineModelId,
+        count: value,
+      });
     }, 400);
-  }, [selectedBlock, blockSpineModel, saveSpineAggMutation]);
+  }, [selectedBlock, blockSpineModel, saveSpineAggMutation, placeSpineDevicesMutation]);
 
   // ── No design selected ─────────────────────────────────────────────────
 
@@ -454,7 +478,7 @@ export default function DesignPage() {
               spineModelId={blockSpineModel.get(selectedBlock.id)}
               spineCount={blockSpineCount.get(selectedBlock.id) ?? null}
               onSpineCountChange={(v) => handleSpineCountChange(selectedBlock.id, v)}
-              onAssignSpine={(id) => handleAssignSpine(selectedBlock.id, id)}
+              onAssignSpine={(id, initialCount) => handleAssignSpine(selectedBlock.id, id, initialCount)}
             />
           ) : (
             <DesignSummary
@@ -489,6 +513,18 @@ export default function DesignPage() {
             <div className="space-y-1.5">
               <Label htmlFor="rack-name">Name</Label>
               <Input id="rack-name" {...rackRegister('name')} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <Select value={rackRole} onValueChange={(v) => rackSetValue('role', v as 'compute' | 'base')}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select role…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="compute">Compute — servers + ToR leaves</SelectItem>
+                  <SelectItem value="base">Base — network infra (spines, firewalls, etc.)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {(rackTypes ?? []).length > 0 && (
               <div className="space-y-1.5">

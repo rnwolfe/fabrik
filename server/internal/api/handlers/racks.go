@@ -19,7 +19,7 @@ type RackService interface {
 	UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error)
 	DeleteRackType(id int64) error
 	// Rack operations
-	CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int) (*models.Rack, error)
+	CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int, role models.RackRole) (*models.Rack, error)
 	ListRacks(blockID *int64) ([]*models.Rack, error)
 	GetRackSummary(id int64) (*models.RackSummary, error)
 	UpdateRack(id int64, name, description string, blockID *int64) (*models.Rack, error)
@@ -171,12 +171,13 @@ func (h *RackHandler) DeleteRackType(w http.ResponseWriter, r *http.Request) {
 // --- Rack handlers ---
 
 type createRackRequest struct {
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	BlockID        *int64  `json:"block_id"`
-	RackTypeID     *int64  `json:"rack_type_id"`
-	HeightU        int     `json:"height_u"`
-	PowerCapacityW int     `json:"power_capacity_w"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	BlockID        *int64          `json:"block_id"`
+	RackTypeID     *int64          `json:"rack_type_id"`
+	HeightU        int             `json:"height_u"`
+	PowerCapacityW int             `json:"power_capacity_w"`
+	Role           models.RackRole `json:"role"`
 }
 
 // CreateRack handles POST /api/racks.
@@ -192,7 +193,11 @@ func (h *RackHandler) CreateRack(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	rack, err := h.svc.CreateRack(req.Name, req.Description, req.BlockID, req.RackTypeID, req.HeightU, req.PowerCapacityW)
+	role := req.Role
+	if role == "" {
+		role = models.RackRoleCompute
+	}
+	rack, err := h.svc.CreateRack(req.Name, req.Description, req.BlockID, req.RackTypeID, req.HeightU, req.PowerCapacityW, role)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())

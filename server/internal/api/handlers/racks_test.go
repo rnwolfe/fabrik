@@ -92,15 +92,18 @@ func (s *fakeRackService) DeleteRackType(id int64) error {
 	return nil
 }
 
-func (s *fakeRackService) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int) (*models.Rack, error) {
+func (s *fakeRackService) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int, role models.RackRole) (*models.Rack, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%w: rack name required", models.ErrConstraintViolation)
 	}
 	if heightU == 0 {
 		heightU = 42
 	}
+	if role == "" {
+		role = models.RackRoleCompute
+	}
 	s.nextRackID++
-	r := &models.Rack{ID: s.nextRackID, Name: name, HeightU: heightU, PowerCapacityW: powerCapacityW, BlockID: blockID, RackTypeID: rackTypeID}
+	r := &models.Rack{ID: s.nextRackID, Name: name, Role: role, HeightU: heightU, PowerCapacityW: powerCapacityW, BlockID: blockID, RackTypeID: rackTypeID}
 	s.racks[r.ID] = r
 	return r, nil
 }
@@ -270,7 +273,7 @@ func TestRackHandler_DeleteRackType_Conflict(t *testing.T) {
 	svc.CreateRackType("type1", "", 42, 0, 0, 0)
 	typeID := int64(1)
 	// Create a rack referencing the type.
-	svc.CreateRack("rack1", "", nil, &typeID, 42, 0)
+	svc.CreateRack("rack1", "", nil, &typeID, 42, 0, "")
 
 	h := handlers.NewRackHandler(svc)
 	mux := http.NewServeMux()
@@ -309,7 +312,7 @@ func TestRackHandler_CreateRack(t *testing.T) {
 
 func TestRackHandler_GetRack(t *testing.T) {
 	svc := newFakeRackSvc()
-	svc.CreateRack("rack-01", "", nil, nil, 42, 0)
+	svc.CreateRack("rack-01", "", nil, nil, 42, 0, "")
 
 	h := handlers.NewRackHandler(svc)
 
@@ -354,7 +357,7 @@ func TestRackHandler_PlaceDevice_ConstraintErrors(t *testing.T) {
 		{
 			name: "place in existing rack",
 			setupSvc: func(s *fakeRackService) {
-				s.CreateRack("rack-1", "", nil, nil, 42, 0)
+				s.CreateRack("rack-1", "", nil, nil, 42, 0, "")
 			},
 			rackID:     "1",
 			body:       `{"device_model_id":1,"name":"dev","position":1}`,
@@ -429,7 +432,7 @@ func TestRackHandler_PlaceDevice_WarningInResponse(t *testing.T) {
 
 func TestRackHandler_RemoveDevice(t *testing.T) {
 	svc := newFakeRackSvc()
-	svc.CreateRack("rack-1", "", nil, nil, 42, 0)
+	svc.CreateRack("rack-1", "", nil, nil, 42, 0, "")
 	svc.PlaceDevice(1, 1, "dev", "", "leaf", 1)
 
 	h := handlers.NewRackHandler(svc)
@@ -460,8 +463,8 @@ func TestRackHandler_RemoveDevice(t *testing.T) {
 func TestRackHandler_ListRacks_BlockIDFilter(t *testing.T) {
 	svc := newFakeRackSvc()
 	blockID := int64(5)
-	svc.CreateRack("rack-in-block", "", &blockID, nil, 42, 0)
-	svc.CreateRack("rack-standalone", "", nil, nil, 42, 0)
+	svc.CreateRack("rack-in-block", "", &blockID, nil, 42, 0, "")
+	svc.CreateRack("rack-standalone", "", nil, nil, 42, 0, "")
 
 	h := handlers.NewRackHandler(svc)
 	req := httptest.NewRequest(http.MethodGet, "/api/racks?block_id=5", nil)
@@ -498,7 +501,7 @@ func (s *errPlaceDeviceSvc) UpdateRackType(id int64, name, description string, h
 	return nil, nil
 }
 func (s *errPlaceDeviceSvc) DeleteRackType(id int64) error { return nil }
-func (s *errPlaceDeviceSvc) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int) (*models.Rack, error) {
+func (s *errPlaceDeviceSvc) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int, role models.RackRole) (*models.Rack, error) {
 	return nil, nil
 }
 func (s *errPlaceDeviceSvc) ListRacks(blockID *int64) ([]*models.Rack, error) { return nil, nil }
@@ -533,7 +536,7 @@ func (s *warningPlaceDeviceSvc) UpdateRackType(id int64, name, description strin
 	return nil, nil
 }
 func (s *warningPlaceDeviceSvc) DeleteRackType(id int64) error { return nil }
-func (s *warningPlaceDeviceSvc) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int) (*models.Rack, error) {
+func (s *warningPlaceDeviceSvc) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int, role models.RackRole) (*models.Rack, error) {
 	return nil, nil
 }
 func (s *warningPlaceDeviceSvc) ListRacks(blockID *int64) ([]*models.Rack, error) { return nil, nil }

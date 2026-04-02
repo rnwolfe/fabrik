@@ -31,6 +31,7 @@ type BlockService interface {
 	AddRackToBlock(rackID int64, blockID *int64, superBlockID int64) (*models.AddRackToBlockResult, error)
 	RemoveRackFromBlock(rackID int64) error
 	ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.TierPortConnection, error)
+	PlaceSpineDevices(blockID, spineModelID int64, count int) error
 }
 
 // BlockHandler handles HTTP requests for block and block aggregation resources.
@@ -403,6 +404,48 @@ func (h *BlockHandler) GetSuperBlockAggregation(w http.ResponseWriter, r *http.R
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
+}
+
+// placeSpineDevicesRequest is the request body for PlaceSpineDevices.
+type placeSpineDevicesRequest struct {
+	DeviceModelID int64 `json:"device_model_id"`
+	Count         int   `json:"count"`
+}
+
+// PlaceSpineDevices handles POST /api/blocks/{id}/spine-devices.
+func (h *BlockHandler) PlaceSpineDevices(w http.ResponseWriter, r *http.Request) {
+	blockID, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req placeSpineDevicesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.DeviceModelID <= 0 {
+		writeError(w, http.StatusBadRequest, "device_model_id is required")
+		return
+	}
+
+	if err := h.svc.PlaceSpineDevices(blockID, req.DeviceModelID, req.Count); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		slog.Error("place spine devices", "err", err, "blockID", blockID)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // parsePlane parses a network plane string from a path variable.

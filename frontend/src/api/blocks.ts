@@ -31,6 +31,8 @@ export const blocksApi = {
   addRack: (data: { rack_id: number; block_id?: number; super_block_id?: number }) =>
     api.post<AddRackToBlockResult>('/blocks/add-rack', data),
   removeRack: (rackId: number) => api.delete(`/block-racks/${rackId}`),
+  placeSpineDevices: (blockId: number, deviceModelId: number, count: number) =>
+    api.post<void>(`/blocks/${blockId}/spine-devices`, { device_model_id: deviceModelId, count }),
 
   // Port connections
   listConnections: (blockId: number, plane: string) =>
