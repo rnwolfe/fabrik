@@ -564,8 +564,9 @@ func (s *BlockService) PlaceSpineDevices(blockID, spineModelID int64, count int)
 		return nil // nothing to do
 	}
 
-	// Remove all existing spine devices from target racks.
-	for _, r := range targetRacks {
+	// Remove all existing spine devices from ALL racks in the block to avoid
+	// stale spines remaining in compute racks (e.g. from a previous fallback pass).
+	for _, r := range allRacks {
 		if err := s.repo.RemoveDevicesByRackAndRole(r.ID, models.DeviceRoleSpine); err != nil {
 			return fmt.Errorf("remove spine devices from rack %d: %w", r.ID, err)
 		}
@@ -575,14 +576,15 @@ func (s *BlockService) PlaceSpineDevices(blockID, spineModelID int64, count int)
 	for si := 0; si < count; si++ {
 		rack := targetRacks[si%len(targetRacks)]
 
-		// Find position: below the lowest occupied position in the rack.
+		// Find position: place below the lowest-positioned device in the rack.
+		// Initialize to HeightU+1 so an exact match at HeightU is still caught.
 		devices, err := s.repo.ListDevicesInRack(rack.ID)
 		if err != nil {
 			return fmt.Errorf("list devices in rack %d: %w", rack.ID, err)
 		}
-		pos := rack.HeightU
+		pos := rack.HeightU + 1
 		for _, d := range devices {
-			if d.Position < pos {
+			if d.Position <= pos {
 				pos = d.Position - 1
 			}
 		}

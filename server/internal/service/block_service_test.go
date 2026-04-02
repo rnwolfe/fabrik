@@ -780,3 +780,124 @@ func TestBlockService_AggregationDownsizeRejected(t *testing.T) {
 		t.Errorf("expected success resizing to 12, got %v", err)
 	}
 }
+
+func TestBlockService_PlaceSpineDevices(t *testing.T) {
+	blockID := int64(1)
+
+	newRepoWithRacks := func(baseCount, computeCount int) (*fakeBlockRepo, *models.DeviceModel) {
+		repo := newFakeBlockRepo()
+		spineModel := repo.addDeviceModel(64)
+		bid := &blockID
+		for i := 0; i < baseCount; i++ {
+			r := repo.addRack(bid)
+			r.Role = models.RackRoleBase
+		}
+		for i := 0; i < computeCount; i++ {
+			r := repo.addRack(bid)
+			r.Role = models.RackRoleCompute
+		}
+		return repo, spineModel
+	}
+
+	countSpinesInBlock := func(repo *fakeBlockRepo) int {
+		n := 0
+		for _, d := range repo.devices {
+			if d.Role == models.DeviceRoleSpine {
+				n++
+			}
+		}
+		return n
+	}
+
+	spinesByRack := func(repo *fakeBlockRepo) map[int64]int {
+		m := make(map[int64]int)
+		for _, d := range repo.devices {
+			if d.Role == models.DeviceRoleSpine {
+				m[d.RackID]++
+			}
+		}
+		return m
+	}
+
+	t.Run("places spines in base racks only", func(t *testing.T) {
+		repo, spineModel := newRepoWithRacks(2, 2)
+		svc := service.NewBlockService(repo)
+
+		if err := svc.PlaceSpineDevices(blockID, spineModel.ID, 4); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := countSpinesInBlock(repo); got != 4 {
+			t.Errorf("want 4 spines, got %d", got)
+		}
+		// All spines must be in base racks only.
+		for rackID, count := range spinesByRack(repo) {
+			rack := repo.racks[rackID]
+			if rack.Role != models.RackRoleBase {
+				t.Errorf("spine placed in non-base rack %d (role=%s, count=%d)", rackID, rack.Role, count)
+			}
+		}
+	})
+
+	t.Run("falls back to all racks when no base racks exist", func(t *testing.T) {
+		repo, spineModel := newRepoWithRacks(0, 2)
+		svc := service.NewBlockService(repo)
+
+		if err := svc.PlaceSpineDevices(blockID, spineModel.ID, 2); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := countSpinesInBlock(repo); got != 2 {
+			t.Errorf("want 2 spines, got %d", got)
+		}
+	})
+
+	t.Run("reconcile removes stale spines before placing new ones", func(t *testing.T) {
+		repo, spineModel := newRepoWithRacks(2, 2)
+		svc := service.NewBlockService(repo)
+
+		// Place 4, then reconcile down to 2.
+		if err := svc.PlaceSpineDevices(blockID, spineModel.ID, 4); err != nil {
+			t.Fatalf("first placement: %v", err)
+		}
+		if err := svc.PlaceSpineDevices(blockID, spineModel.ID, 2); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+		if got := countSpinesInBlock(repo); got != 2 {
+			t.Errorf("want 2 spines after reconcile, got %d", got)
+		}
+	})
+
+	t.Run("stale spines in compute racks are removed when base racks exist", func(t *testing.T) {
+		// Simulate a block that previously had no base racks (spines in compute racks),
+		// then base racks were added.
+		repo, spineModel := newRepoWithRacks(2, 2)
+		svc := service.NewBlockService(repo)
+
+		// Manually plant a stale spine in a compute rack.
+		var computeRackID int64
+		for id, r := range repo.racks {
+			if r.Role == models.RackRoleCompute {
+				computeRackID = id
+				break
+			}
+		}
+		repo.nextDeviceID++
+		repo.devices[repo.nextDeviceID] = &models.Device{
+			ID: repo.nextDeviceID, RackID: computeRackID,
+			Role: models.DeviceRoleSpine, Name: "stale-spine",
+		}
+
+		if err := svc.PlaceSpineDevices(blockID, spineModel.ID, 2); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Stale spine in compute rack must be gone.
+		for _, d := range repo.devices {
+			if d.Role == models.DeviceRoleSpine && d.RackID == computeRackID {
+				t.Errorf("stale spine still present in compute rack %d", computeRackID)
+			}
+		}
+		if got := countSpinesInBlock(repo); got != 2 {
+			t.Errorf("want 2 spines total, got %d", got)
+		}
+	})
+}

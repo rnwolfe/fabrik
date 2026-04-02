@@ -173,6 +173,9 @@ func (s *fakeBlockService) GetSuperBlockAggregationSummary(superBlockID int64, p
 }
 
 func (s *fakeBlockService) PlaceSpineDevices(blockID, spineModelID int64, count int) error {
+	if _, ok := s.blocks[blockID]; !ok {
+		return models.ErrNotFound
+	}
 	return nil
 }
 
@@ -494,6 +497,72 @@ func TestBlockHandler_ListPortConnections(t *testing.T) {
 		r.SetPathValue("id", "1")
 		r.SetPathValue("plane", "management")
 		w := blockResponse(t, http.HandlerFunc(h.ListPortConnections), r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+}
+
+func TestBlockHandler_PlaceSpineDevices(t *testing.T) {
+	svc := newFakeBlockSvc()
+	h := handlers.NewBlockHandler(svc)
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
+
+	t.Run("success", func(t *testing.T) {
+		body := map[string]any{"device_model_id": 10, "count": 4}
+		r := blockRequest(t, "POST", "/api/blocks/1/spine-devices", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PlaceSpineDevices), r)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("invalid id", func(t *testing.T) {
+		body := map[string]any{"device_model_id": 10, "count": 4}
+		r := blockRequest(t, "POST", "/api/blocks/abc/spine-devices", body)
+		r.SetPathValue("id", "abc")
+		w := blockResponse(t, http.HandlerFunc(h.PlaceSpineDevices), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("invalid json body", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "/api/blocks/1/spine-devices", bytes.NewReader([]byte("not json")))
+		r.Header.Set("Content-Type", "application/json")
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PlaceSpineDevices), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("missing device_model_id", func(t *testing.T) {
+		body := map[string]any{"count": 4}
+		r := blockRequest(t, "POST", "/api/blocks/1/spine-devices", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PlaceSpineDevices), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("zero device_model_id rejected", func(t *testing.T) {
+		body := map[string]any{"device_model_id": 0, "count": 4}
+		r := blockRequest(t, "POST", "/api/blocks/1/spine-devices", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PlaceSpineDevices), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("block not found", func(t *testing.T) {
+		body := map[string]any{"device_model_id": 10, "count": 4}
+		r := blockRequest(t, "POST", "/api/blocks/9999/spine-devices", body)
+		r.SetPathValue("id", "9999")
+		w := blockResponse(t, http.HandlerFunc(h.PlaceSpineDevices), r)
 		if w.Code != http.StatusNotFound {
 			t.Errorf("expected 404, got %d", w.Code)
 		}

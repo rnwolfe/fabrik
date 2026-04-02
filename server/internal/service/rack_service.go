@@ -212,6 +212,8 @@ func (s *RackService) CreateRack(name, description string, blockID, rackTypeID *
 
 	if role == "" {
 		role = models.RackRoleCompute
+	} else if role != models.RackRoleCompute && role != models.RackRoleBase {
+		return nil, fmt.Errorf("%w: invalid rack role %q", models.ErrConstraintViolation, role)
 	}
 	r, err := s.rackRepo.Create(&models.Rack{
 		BlockID:        blockID,

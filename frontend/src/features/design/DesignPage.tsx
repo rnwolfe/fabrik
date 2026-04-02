@@ -258,11 +258,13 @@ export default function DesignPage() {
     handleSubmit: rackHandleSubmit,
     reset: rackReset,
     setValue: rackSetValue,
+    watch: rackWatch,
   } = useForm<AddRackForm>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(addRackSchema) as any,
     defaultValues: { role: 'compute' },
   });
+  const rackRole = rackWatch('role');
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -514,7 +516,7 @@ export default function DesignPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Role</Label>
-              <Select defaultValue="compute" onValueChange={(v) => rackSetValue('role', v as 'compute' | 'base')}>
+              <Select value={rackRole} onValueChange={(v) => rackSetValue('role', v as 'compute' | 'base')}>
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Select role…" />
                 </SelectTrigger>
