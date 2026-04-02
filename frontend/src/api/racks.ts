@@ -28,4 +28,6 @@ export const racksApi = {
   create: (data: RackInput) => api.post<RackSummary>('/racks', data),
   update: (id: number, data: Partial<RackInput>) => api.put<RackSummary>(`/racks/${id}`, data),
   delete: (id: number) => api.delete(`/racks/${id}`),
+  placeServerDevices: (rackId: number, deviceModelId: number, count: number) =>
+    api.post<void>(`/racks/${rackId}/server-devices`, { device_model_id: deviceModelId, count }),
 };

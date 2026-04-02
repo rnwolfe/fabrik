@@ -242,6 +242,15 @@ func (r *fakeRackRepo) GetDeviceModel(id int64) (*models.DeviceModel, error) {
 	return &cp, nil
 }
 
+func (r *fakeRackRepo) RemoveDevicesByRole(rackID int64, role models.DeviceRole) error {
+	for id, d := range r.devices {
+		if d.RackID == rackID && d.Role == role {
+			delete(r.devices, id)
+		}
+	}
+	return nil
+}
+
 // --- Tests ---
 
 func newRackSvc() (*service.RackService, *fakeRackTypeRepo, *fakeRackRepo) {

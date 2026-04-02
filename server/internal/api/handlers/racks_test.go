@@ -191,6 +191,13 @@ func (s *fakeRackService) RemoveDevice(rackID, deviceID int64, compact bool) err
 	return nil
 }
 
+func (s *fakeRackService) PlaceServerDevices(rackID, serverModelID int64, count int) error {
+	if _, ok := s.racks[rackID]; !ok {
+		return models.ErrNotFound
+	}
+	return nil
+}
+
 // --- Tests ---
 
 func TestRackHandler_CreateRackType(t *testing.T) {
@@ -524,6 +531,9 @@ func (s *errPlaceDeviceSvc) MoveDeviceCrossRack(srcRackID, deviceID, dstRackID i
 func (s *errPlaceDeviceSvc) RemoveDevice(rackID, deviceID int64, compact bool) error {
 	return errors.New("not implemented")
 }
+func (s *errPlaceDeviceSvc) PlaceServerDevices(rackID, serverModelID int64, count int) error {
+	return nil
+}
 
 type warningPlaceDeviceSvc struct{}
 
@@ -558,5 +568,8 @@ func (s *warningPlaceDeviceSvc) MoveDeviceCrossRack(srcRackID, deviceID, dstRack
 	return nil, nil
 }
 func (s *warningPlaceDeviceSvc) RemoveDevice(rackID, deviceID int64, compact bool) error {
+	return nil
+}
+func (s *warningPlaceDeviceSvc) PlaceServerDevices(rackID, serverModelID int64, count int) error {
 	return nil
 }

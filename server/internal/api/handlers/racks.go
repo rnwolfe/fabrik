@@ -29,6 +29,7 @@ type RackService interface {
 	MoveDeviceInRack(rackID, deviceID int64, newPosition int) (*models.PlaceDeviceResult, error)
 	MoveDeviceCrossRack(srcRackID, deviceID, dstRackID int64, newPosition int) (*models.PlaceDeviceResult, error)
 	RemoveDevice(rackID, deviceID int64, compact bool) error
+	PlaceServerDevices(rackID, serverModelID int64, count int) error
 }
 
 // RackHandler handles HTTP requests for rack type and rack resources.
@@ -470,4 +471,46 @@ func (h *RackHandler) RemoveDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type placeServerDevicesRequest struct {
+	DeviceModelID int64 `json:"device_model_id"`
+	Count         int   `json:"count"`
+}
+
+// PlaceServerDevices handles POST /api/racks/{id}/server-devices.
+func (h *RackHandler) PlaceServerDevices(w http.ResponseWriter, r *http.Request) {
+	rackID, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req placeServerDevicesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.DeviceModelID <= 0 {
+		writeError(w, http.StatusBadRequest, "device_model_id is required")
+		return
+	}
+	if err := h.svc.PlaceServerDevices(rackID, req.DeviceModelID, req.Count); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, models.ErrConstraintViolation) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		slog.Error("place server devices", "err", err, "rackID", rackID)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }

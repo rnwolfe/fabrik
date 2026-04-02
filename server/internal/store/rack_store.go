@@ -278,6 +278,12 @@ func (s *RackStore) ListDevicesInRack(rackID int64) ([]*models.DeviceSummary, er
 	return out, nil
 }
 
+// RemoveDevicesByRole deletes all devices with the given role from a rack.
+func (s *RackStore) RemoveDevicesByRole(rackID int64, role models.DeviceRole) error {
+	_, err := s.db.Exec(`DELETE FROM devices WHERE rack_id = ? AND role = ?`, rackID, role)
+	return err
+}
+
 // GetDeviceModel returns the DeviceModel with the given id.
 func (s *RackStore) GetDeviceModel(id int64) (*models.DeviceModel, error) {
 	const q = `

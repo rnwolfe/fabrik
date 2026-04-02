@@ -13,6 +13,7 @@ export const blocksApi = {
     spine_count?: number;
   }) => api.post<CreateBlockResult>('/blocks', data),
   get: (id: number) => api.get<Block>(`/blocks/${id}`),
+  delete: (id: number) => api.delete(`/blocks/${id}`),
 
   // Aggregation (spine/leaf model assignment per plane)
   assignAggregation: (blockId: number, plane: string, deviceModelId: number, spineCount?: number) =>

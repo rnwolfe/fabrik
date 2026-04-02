@@ -290,6 +290,19 @@ func (r *fakeBlockRepo) RemoveDevicesByRackAndRole(rackID int64, role models.Dev
 	return nil
 }
 
+func (r *fakeBlockRepo) DeleteBlock(id int64) error {
+	if _, ok := r.blocks[id]; !ok {
+		return models.ErrNotFound
+	}
+	delete(r.blocks, id)
+	return nil
+}
+
+func (r *fakeBlockRepo) DeleteRack(id int64) error {
+	delete(r.racks, id)
+	return nil
+}
+
 // --- helper to create a TierAggregation at block scope (used in test setup) ---
 
 func blockAgg(blockID, deviceModelID int64, plane models.NetworkPlane) *models.TierAggregation {

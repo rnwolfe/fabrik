@@ -179,6 +179,14 @@ func (s *fakeBlockService) PlaceSpineDevices(blockID, spineModelID int64, count 
 	return nil
 }
 
+func (s *fakeBlockService) DeleteBlock(id int64) error {
+	if _, ok := s.blocks[id]; !ok {
+		return models.ErrNotFound
+	}
+	delete(s.blocks, id)
+	return nil
+}
+
 // --- helpers ---
 
 func blockRequest(t *testing.T, method, url string, body any) *http.Request {

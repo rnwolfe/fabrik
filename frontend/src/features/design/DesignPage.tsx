@@ -30,6 +30,7 @@ import DeviceModelPicker, { PickerGuardProvider, usePickerGuard } from '@/compon
 import BlockCard from './BlockCard';
 import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
+import RackElevation from './RackElevation';
 import type { Block, BlockAggregationSummary, RackSummary, DeviceModel } from '@/models';
 
 // ─── New Block form schema ───────────────────────────────────────────────────
@@ -68,6 +69,9 @@ export default function DesignPage() {
   // Dialog state
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [rackDialogBlockId, setRackDialogBlockId] = useState<number | null>(null);
+
+  // Block delete confirm state
+  const [blockToDelete, setBlockToDelete] = useState<Block | null>(null);
 
   // Per-block spine count (local state until we persist it)
   const [blockSpineCount, setBlockSpineCount] = useState<Map<number, number>>(new Map());
@@ -238,6 +242,15 @@ export default function DesignPage() {
       blocksApi.placeSpineDevices(blockId, deviceModelId, count),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['racks'] });
+    },
+  });
+
+  const deleteBlockMutation = useMutation({
+    mutationFn: (blockId: number) => blocksApi.delete(blockId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['blocks'] });
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['aggs'] });
     },
   });
 
@@ -458,9 +471,7 @@ export default function DesignPage() {
                     setRackDialogBlockId(block.id);
                   }}
                   onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
-                  onDelete={() => {
-                    // TODO: add block delete API
-                  }}
+                  onDelete={() => setBlockToDelete(block)}
                 />
               ))}
             </div>
@@ -469,7 +480,9 @@ export default function DesignPage() {
 
         {/* Right panel: Detail */}
         <div className="flex-1 overflow-y-auto">
-          {selectedBlock ? (
+          {selectedRackId ? (
+            <RackElevation rackId={selectedRackId} allRacks={allRacks ?? []} />
+          ) : selectedBlock ? (
             <BlockDetailPanel
               block={selectedBlock}
               aggs={aggsByBlock?.get(selectedBlock.id) ?? []}
@@ -502,6 +515,33 @@ export default function DesignPage() {
           onSelectLeaf={(id) => blockSetValue('leaf_model_id', id)}
         />
       </PickerGuardProvider>
+
+      {/* ── Delete Block Dialog ──────────────────────────────────────────── */}
+      <Dialog open={blockToDelete !== null} onOpenChange={(open) => !open && setBlockToDelete(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Block?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete <strong>{blockToDelete?.name}</strong> and all its racks and devices.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlockToDelete(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteBlockMutation.isPending}
+              onClick={() => {
+                if (!blockToDelete) return;
+                deleteBlockMutation.mutate(blockToDelete.id, {
+                  onSuccess: () => setBlockToDelete(null),
+                });
+              }}
+            >
+              {deleteBlockMutation.isPending ? 'Deleting…' : 'Delete Block'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add Rack Dialog ──────────────────────────────────────────────── */}
       <Dialog open={rackDialogBlockId !== null} onOpenChange={(open) => !open && setRackDialogBlockId(null)}>

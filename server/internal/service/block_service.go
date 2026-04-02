@@ -41,6 +41,8 @@ type BlockRepository interface {
 	RemoveDevicesByRackAndRole(rackID int64, role models.DeviceRole) error
 	UpdateRackBlock(rackID int64, blockID *int64) error
 	GetRack(id int64) (*models.Rack, error)
+	DeleteBlock(id int64) error
+	DeleteRack(id int64) error
 }
 
 // BlockService implements business logic for blocks and block-level aggregation.
@@ -606,6 +608,35 @@ func (s *BlockService) PlaceSpineDevices(blockID, spineModelID int64, count int)
 	}
 
 	slog.Info("spine devices placed", "blockID", blockID, "spineModelID", spineModelID, "count", count)
+	return nil
+}
+
+// DeleteBlock removes a block and all its racks, devices, and aggregations.
+func (s *BlockService) DeleteBlock(id int64) error {
+	racks, err := s.repo.ListRacksInBlock(id)
+	if err != nil {
+		return fmt.Errorf("list racks in block %d: %w", id, err)
+	}
+	// Delete aggregations for this block (cascades port connections via FK)
+	aggs, err := s.repo.ListAggregations(models.ScopeBlock, id)
+	if err != nil {
+		return fmt.Errorf("list aggregations for block %d: %w", id, err)
+	}
+	for _, agg := range aggs {
+		if err := s.repo.DeleteAggregation(models.ScopeBlock, id, agg.Plane); err != nil {
+			return fmt.Errorf("delete aggregation for block %d plane %s: %w", id, agg.Plane, err)
+		}
+	}
+	// Delete each rack (cascades devices via FK)
+	for _, r := range racks {
+		if err := s.repo.DeleteRack(r.ID); err != nil {
+			return fmt.Errorf("delete rack %d: %w", r.ID, err)
+		}
+	}
+	if err := s.repo.DeleteBlock(id); err != nil {
+		return fmt.Errorf("delete block %d: %w", id, err)
+	}
+	slog.Info("block deleted", "blockID", id)
 	return nil
 }
 
