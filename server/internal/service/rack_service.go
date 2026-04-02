@@ -676,18 +676,50 @@ func (s *RackService) PlaceServerDevices(rackID, serverModelID int64, count int)
 	if serverModel.DeviceModelType != "server" {
 		return fmt.Errorf("%w: device model %d is not a server (type: %s)", models.ErrConstraintViolation, serverModelID, serverModel.DeviceModelType)
 	}
-	// Remove existing servers
+	// Remove existing servers first.
 	if err := s.rackRepo.RemoveDevicesByRole(rackID, models.DeviceRoleServer); err != nil {
 		return fmt.Errorf("remove server devices from rack %d: %w", rackID, err)
 	}
-	// Place servers from top (position 1) downward — standard rack convention
+
+	// Re-read remaining devices (leaves, spines, etc.) to find occupied U ranges.
+	remaining, err := s.rackRepo.ListDevicesInRack(rackID)
+	if err != nil {
+		return fmt.Errorf("list devices in rack %d after server removal: %w", rackID, err)
+	}
+	// occupied[u] = true if slot u (1-based) is used by a non-server device.
+	occupied := make(map[int]bool, rack.HeightU)
+	for _, d := range remaining {
+		for u := d.Position; u < d.Position+d.HeightU; u++ {
+			occupied[u] = true
+		}
+	}
+
+	// Place servers from position 1 downward, skipping occupied slots.
+	placed := 0
 	pos := 1
-	for i := 0; i < count; i++ {
-		if pos+serverModel.HeightU-1 > rack.HeightU {
-			slog.Warn("rack full, truncating server placement", "rackID", rackID, "placed", i, "requested", count)
+	for placed < count {
+		// Advance past occupied slots.
+		for pos <= rack.HeightU && occupied[pos] {
+			pos++
+		}
+		end := pos + serverModel.HeightU - 1
+		if end > rack.HeightU {
+			slog.Warn("rack full, truncating server placement", "rackID", rackID, "placed", placed, "requested", count)
 			break
 		}
-		name := fmt.Sprintf("server-%d", i+1)
+		// Check the entire span is free.
+		spanFree := true
+		for u := pos; u <= end; u++ {
+			if occupied[u] {
+				spanFree = false
+				pos = u + 1
+				break
+			}
+		}
+		if !spanFree {
+			continue
+		}
+		name := fmt.Sprintf("server-%d", placed+1)
 		_, err := s.rackRepo.PlaceDevice(&models.Device{
 			RackID:        rackID,
 			DeviceModelID: serverModel.ID,
@@ -698,7 +730,12 @@ func (s *RackService) PlaceServerDevices(rackID, serverModelID int64, count int)
 		if err != nil {
 			return fmt.Errorf("place server %s in rack %d: %w", name, rackID, err)
 		}
+		// Mark span as occupied for subsequent iterations.
+		for u := pos; u <= end; u++ {
+			occupied[u] = true
+		}
 		pos += serverModel.HeightU
+		placed++
 	}
 	slog.Info("server devices placed", "rackID", rackID, "serverModelID", serverModelID, "count", count)
 	return nil

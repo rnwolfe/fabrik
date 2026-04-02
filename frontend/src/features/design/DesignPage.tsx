@@ -481,7 +481,7 @@ export default function DesignPage() {
         {/* Right panel: Detail */}
         <div className="flex-1 overflow-y-auto">
           {selectedRackId ? (
-            <RackElevation rackId={selectedRackId} allRacks={allRacks ?? []} />
+            <RackElevation rackId={selectedRackId} />
           ) : selectedBlock ? (
             <BlockDetailPanel
               block={selectedBlock}

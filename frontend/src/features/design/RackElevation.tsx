@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import DeviceModelPicker from '@/components/DeviceModelPicker';
 import { cn } from '@/lib/utils';
-import type { RackSummary, DeviceModel, DeviceSummary } from '@/models';
+import type { DeviceModel, DeviceSummary } from '@/models';
 
 // Role → display color
 const ROLE_COLORS: Record<string, string> = {
@@ -31,20 +31,19 @@ const ROLE_LABELS: Record<string, string> = {
 
 interface RackElevationProps {
   rackId: number;
-  allRacks: RackSummary[];
 }
 
-export default function RackElevation({ rackId, allRacks }: RackElevationProps) {
+export default function RackElevation({ rackId }: RackElevationProps) {
   const queryClient = useQueryClient();
   const [serverModelId, setServerModelId] = useState<number | undefined>();
   const [serverCount, setServerCount] = useState(1);
 
-  // Use the rack from allRacks (already cached) and refresh via individual GET
-  const cachedRack = allRacks.find((r) => r.id === rackId);
-  const { data: rack } = useQuery({
+  // Fetch the full RackSummary (includes devices, used_u, available_u).
+  // allRacks comes from GET /api/racks which returns bare Rack (no summary fields),
+  // so we cannot use it as initialData — always fetch the individual summary.
+  const { data: rack, isLoading } = useQuery({
     queryKey: ['rack', rackId],
     queryFn: () => racksApi.get(rackId),
-    initialData: cachedRack,
   });
 
   const { data: catalog } = useQuery({
@@ -67,6 +66,17 @@ export default function RackElevation({ rackId, allRacks }: RackElevationProps) 
     },
   });
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4 p-4">
+        <div className="h-6 w-32 animate-pulse rounded bg-muted" />
+        <div className="grid grid-cols-3 gap-2">
+          {[1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-md bg-muted" />)}
+        </div>
+        <div className="h-64 animate-pulse rounded-lg bg-muted" />
+      </div>
+    );
+  }
   if (!rack) return null;
 
   // Build a map of position → device for rendering
