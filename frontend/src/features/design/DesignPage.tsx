@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Layers,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { blocksApi, scaffoldApi, superBlocksApi } from '@/api/blocks';
 import { racksApi } from '@/api/racks';
 import { catalogApi } from '@/api/catalog';
@@ -30,6 +31,7 @@ import DeviceModelPicker, { PickerGuardProvider, usePickerGuard } from '@/compon
 import BlockCard from './BlockCard';
 import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
+import RackElevation from './RackElevation';
 import type { Block, BlockAggregationSummary, RackSummary, DeviceModel } from '@/models';
 
 // ─── New Block form schema ───────────────────────────────────────────────────
@@ -68,6 +70,9 @@ export default function DesignPage() {
   // Dialog state
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [rackDialogBlockId, setRackDialogBlockId] = useState<number | null>(null);
+
+  // Block delete confirm state
+  const [blockToDelete, setBlockToDelete] = useState<Block | null>(null);
 
   // Per-block spine count (local state until we persist it)
   const [blockSpineCount, setBlockSpineCount] = useState<Map<number, number>>(new Map());
@@ -138,7 +143,6 @@ export default function DesignPage() {
 
   // Auto-select first block when blocks load. Calling setState inside an effect
   // is intentional here — we're syncing UI selection state with fetched data.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if ((blocks ?? []).length > 0 && !selectedBlockId) {
       setSelectedBlockId(blocks![0].id);
@@ -148,7 +152,6 @@ export default function DesignPage() {
       setSelectedRackId(null);
     }
   }, [blocks, selectedBlockId]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const selectedBlock = (blocks ?? []).find((b: Block) => b.id === selectedBlockId) ?? null;
 
@@ -163,7 +166,6 @@ export default function DesignPage() {
 
   // Initialize blockSpineModel / blockSpineCount from persisted data, but don't
   // clobber values the user has already set for this block in the current session.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!selectedBlock || !superBlockSpineAgg) return;
     const blockId = selectedBlock.id;
@@ -176,7 +178,6 @@ export default function DesignPage() {
       return new Map(prev).set(blockId, superBlockSpineAgg.spine_count);
     });
   }, [selectedBlock, superBlockSpineAgg, setBlockSpineModel, setBlockSpineCount]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -238,6 +239,17 @@ export default function DesignPage() {
       blocksApi.placeSpineDevices(blockId, deviceModelId, count),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['racks'] });
+    },
+  });
+
+  const deleteBlockMutation = useMutation({
+    mutationFn: (blockId: number) => blocksApi.delete(blockId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['blocks'] });
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['aggs'] });
+      setSelectedBlockId(null);
+      setSelectedRackId(null);
     },
   });
 
@@ -458,9 +470,7 @@ export default function DesignPage() {
                     setRackDialogBlockId(block.id);
                   }}
                   onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
-                  onDelete={() => {
-                    // TODO: add block delete API
-                  }}
+                  onDelete={() => setBlockToDelete(block)}
                 />
               ))}
             </div>
@@ -468,8 +478,10 @@ export default function DesignPage() {
         </div>
 
         {/* Right panel: Detail */}
-        <div className="flex-1 overflow-y-auto">
-          {selectedBlock ? (
+        <div className={cn('flex-1', selectedRackId ? 'overflow-hidden' : 'overflow-y-auto')}>
+          {selectedRackId ? (
+            <RackElevation rackId={selectedRackId} />
+          ) : selectedBlock ? (
             <BlockDetailPanel
               block={selectedBlock}
               aggs={aggsByBlock?.get(selectedBlock.id) ?? []}
@@ -502,6 +514,33 @@ export default function DesignPage() {
           onSelectLeaf={(id) => blockSetValue('leaf_model_id', id)}
         />
       </PickerGuardProvider>
+
+      {/* ── Delete Block Dialog ──────────────────────────────────────────── */}
+      <Dialog open={blockToDelete !== null} onOpenChange={(open) => !open && setBlockToDelete(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Block?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete <strong>{blockToDelete?.name}</strong> and all its racks and devices.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlockToDelete(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteBlockMutation.isPending}
+              onClick={() => {
+                if (!blockToDelete) return;
+                deleteBlockMutation.mutate(blockToDelete.id, {
+                  onSuccess: () => setBlockToDelete(null),
+                });
+              }}
+            >
+              {deleteBlockMutation.isPending ? 'Deleting…' : 'Delete Block'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add Rack Dialog ──────────────────────────────────────────────── */}
       <Dialog open={rackDialogBlockId !== null} onOpenChange={(open) => !open && setRackDialogBlockId(null)}>

@@ -191,6 +191,13 @@ func (s *fakeRackService) RemoveDevice(rackID, deviceID int64, compact bool) err
 	return nil
 }
 
+func (s *fakeRackService) PlaceServerDevices(rackID, serverModelID int64, count int) error {
+	if _, ok := s.racks[rackID]; !ok {
+		return models.ErrNotFound
+	}
+	return nil
+}
+
 // --- Tests ---
 
 func TestRackHandler_CreateRackType(t *testing.T) {
@@ -483,6 +490,61 @@ func TestRackHandler_ListRacks_BlockIDFilter(t *testing.T) {
 	}
 }
 
+func TestRackHandler_PlaceServerDevices(t *testing.T) {
+	tests := []struct {
+		name       string
+		rackID     string
+		body       string
+		wantStatus int
+	}{
+		{name: "success", rackID: "1", body: `{"device_model_id":1,"count":3}`, wantStatus: http.StatusOK},
+		{name: "rack not found", rackID: "99", body: `{"device_model_id":1,"count":1}`, wantStatus: http.StatusNotFound},
+		{name: "missing device_model_id", rackID: "1", body: `{"count":3}`, wantStatus: http.StatusBadRequest},
+		{name: "invalid json", rackID: "1", body: `{bad`, wantStatus: http.StatusBadRequest},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newFakeRackSvc()
+			svc.CreateRack("rack-1", "", nil, nil, 42, 0, "")
+			h := handlers.NewRackHandler(svc)
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /api/racks/{id}/server-devices", h.PlaceServerDevices)
+			req := httptest.NewRequest(http.MethodPost, "/api/racks/"+tc.rackID+"/server-devices", bytes.NewBufferString(tc.body))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Errorf("expected %d, got %d (body: %s)", tc.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestRackHandler_PlaceServerDevices_ErrorMapping(t *testing.T) {
+	errTests := []struct {
+		name     string
+		svcErr   error
+		wantCode int
+	}{
+		{name: "constraint violation", svcErr: fmt.Errorf("%w: count must be >= 0", models.ErrConstraintViolation), wantCode: http.StatusUnprocessableEntity},
+		{name: "ru overflow", svcErr: fmt.Errorf("%w: no space", models.ErrRUOverflow), wantCode: http.StatusBadRequest},
+		{name: "position overlap", svcErr: fmt.Errorf("%w: overlap", models.ErrPositionOverlap), wantCode: http.StatusBadRequest},
+	}
+	for _, tc := range errTests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &errPlaceServerSvc{err: tc.svcErr}
+			h := handlers.NewRackHandler(svc)
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /api/racks/{id}/server-devices", h.PlaceServerDevices)
+			req := httptest.NewRequest(http.MethodPost, "/api/racks/1/server-devices", bytes.NewBufferString(`{"device_model_id":1,"count":1}`))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode {
+				t.Errorf("expected %d for %s, got %d", tc.wantCode, tc.name, rec.Code)
+			}
+		})
+	}
+}
+
 // --- Helper stubs for error-specific tests ---
 
 type errPlaceDeviceSvc struct {
@@ -524,6 +586,9 @@ func (s *errPlaceDeviceSvc) MoveDeviceCrossRack(srcRackID, deviceID, dstRackID i
 func (s *errPlaceDeviceSvc) RemoveDevice(rackID, deviceID int64, compact bool) error {
 	return errors.New("not implemented")
 }
+func (s *errPlaceDeviceSvc) PlaceServerDevices(rackID, serverModelID int64, count int) error {
+	return nil
+}
 
 type warningPlaceDeviceSvc struct{}
 
@@ -559,4 +624,45 @@ func (s *warningPlaceDeviceSvc) MoveDeviceCrossRack(srcRackID, deviceID, dstRack
 }
 func (s *warningPlaceDeviceSvc) RemoveDevice(rackID, deviceID int64, compact bool) error {
 	return nil
+}
+func (s *warningPlaceDeviceSvc) PlaceServerDevices(rackID, serverModelID int64, count int) error {
+	return nil
+}
+
+// errPlaceServerSvc is a stub that returns a configurable error from PlaceServerDevices.
+type errPlaceServerSvc struct {
+	*fakeRackService
+	err error
+}
+
+func (s *errPlaceServerSvc) CreateRackType(name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
+	return nil, nil
+}
+func (s *errPlaceServerSvc) ListRackTypes() ([]*models.RackTemplate, error)  { return nil, nil }
+func (s *errPlaceServerSvc) GetRackType(id int64) (*models.RackTemplate, error) { return nil, nil }
+func (s *errPlaceServerSvc) UpdateRackType(id int64, name, description string, heightU, powerCapacityW, powerOversubPctWarn, powerOversubPctMax int) (*models.RackTemplate, error) {
+	return nil, nil
+}
+func (s *errPlaceServerSvc) DeleteRackType(id int64) error { return nil }
+func (s *errPlaceServerSvc) CreateRack(name, description string, blockID, rackTypeID *int64, heightU, powerCapacityW int, role models.RackRole) (*models.Rack, error) {
+	return nil, nil
+}
+func (s *errPlaceServerSvc) ListRacks(blockID *int64) ([]*models.Rack, error) { return nil, nil }
+func (s *errPlaceServerSvc) GetRackSummary(id int64) (*models.RackSummary, error) { return nil, nil }
+func (s *errPlaceServerSvc) UpdateRack(id int64, name, description string, blockID *int64) (*models.Rack, error) {
+	return nil, nil
+}
+func (s *errPlaceServerSvc) DeleteRack(id int64) error { return nil }
+func (s *errPlaceServerSvc) PlaceDevice(rackID, deviceModelID int64, name, description, role string, position int) (*models.PlaceDeviceResult, error) {
+	return nil, nil
+}
+func (s *errPlaceServerSvc) MoveDeviceInRack(rackID, deviceID int64, newPosition int) (*models.PlaceDeviceResult, error) {
+	return nil, nil
+}
+func (s *errPlaceServerSvc) MoveDeviceCrossRack(srcRackID, deviceID, dstRackID int64, newPosition int) (*models.PlaceDeviceResult, error) {
+	return nil, nil
+}
+func (s *errPlaceServerSvc) RemoveDevice(rackID, deviceID int64, compact bool) error { return nil }
+func (s *errPlaceServerSvc) PlaceServerDevices(rackID, serverModelID int64, count int) error {
+	return s.err
 }

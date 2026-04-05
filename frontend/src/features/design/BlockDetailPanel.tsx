@@ -161,6 +161,13 @@ export default function BlockDetailPanel({
     [leafModel, spineModel, effectiveSpineCount, rackCount]
   );
 
+  // Count placed servers in compute racks
+  const serverCount = racks
+    .filter((r) => r.role === 'compute')
+    .flatMap((r) => r.devices ?? [])
+    .filter((d) => d.role === 'server')
+    .length;
+
   const maxRacks = spineModel ? Math.floor(spineModel.port_count / 2) : 0;
 
   return (
@@ -255,8 +262,10 @@ export default function BlockDetailPanel({
           <Stat
             icon={Zap}
             label="Host Ports"
-            value={topology.total_host_ports}
-            tooltip="Physical leaf downlink port ceiling (1:1 assumed). Actual server connections may be higher with breakout cabling (e.g. 400G → 4×100G)."
+            value={serverCount > 0
+              ? `${serverCount} servers / ${topology.total_host_ports} ports`
+              : topology.total_host_ports}
+            tooltip="Physical leaf downlink port ceiling (1:1 assumed). When servers are placed, shows server count vs. available ports."
           />
         </div>
       )}

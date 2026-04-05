@@ -39,6 +39,7 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("DELETE /api/racks/{id}", racks.DeleteRack)
 
 	mux.HandleFunc("POST /api/racks/{id}/devices", racks.PlaceDevice)
+	mux.HandleFunc("POST /api/racks/{id}/server-devices", racks.PlaceServerDevices)
 	mux.HandleFunc("PUT /api/racks/{rack_id}/devices/{device_id}", racks.MoveDeviceInRack)
 	mux.HandleFunc("PUT /api/racks/{rack_id}/devices/{device_id}/move", racks.MoveDeviceCrossRack)
 	mux.HandleFunc("DELETE /api/racks/{rack_id}/devices/{device_id}", racks.RemoveDevice)
@@ -53,6 +54,7 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("POST /api/blocks", blocks.CreateBlock)
 	mux.HandleFunc("GET /api/blocks", blocks.ListBlocks)
 	mux.HandleFunc("GET /api/blocks/{id}", blocks.GetBlock)
+	mux.HandleFunc("DELETE /api/blocks/{id}", blocks.DeleteBlock)
 
 	mux.HandleFunc("PUT /api/blocks/{id}/aggregations/{plane}", blocks.AssignAggregation)
 	mux.HandleFunc("GET /api/blocks/{id}/aggregations/{plane}", blocks.GetAggregation)

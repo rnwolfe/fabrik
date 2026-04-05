@@ -232,6 +232,44 @@ func (s *BlockStore) ListRacksInBlock(blockID int64) ([]*models.Rack, error) {
 	return out, nil
 }
 
+// DeleteBlock deletes a block by ID.
+func (s *BlockStore) DeleteBlock(id int64) error {
+	res, err := s.db.Exec(`DELETE FROM blocks WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete block %d: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete block %d rows affected: %w", id, err)
+	}
+	if n == 0 {
+		return models.ErrNotFound
+	}
+	return nil
+}
+
+// DeleteRack deletes a rack by ID (cascade-deletes its devices via FK).
+func (s *BlockStore) DeleteRack(id int64) error {
+	res, err := s.db.Exec(`DELETE FROM racks WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete rack %d: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete rack %d rows affected: %w", id, err)
+	}
+	if n == 0 {
+		return models.ErrNotFound
+	}
+	return nil
+}
+
+// RemoveAllDevicesFromRack deletes all devices in a rack.
+func (s *BlockStore) RemoveAllDevicesFromRack(rackID int64) error {
+	_, err := s.db.Exec(`DELETE FROM devices WHERE rack_id = ?`, rackID)
+	return err
+}
+
 // RemoveDevicesByRackAndRole deletes all devices in a rack with the given role.
 func (s *BlockStore) RemoveDevicesByRackAndRole(rackID int64, role models.DeviceRole) error {
 	_, err := s.db.Exec(`DELETE FROM devices WHERE rack_id = ? AND role = ?`, rackID, role)

@@ -290,6 +290,19 @@ func (r *fakeBlockRepo) RemoveDevicesByRackAndRole(rackID int64, role models.Dev
 	return nil
 }
 
+func (r *fakeBlockRepo) DeleteBlock(id int64) error {
+	if _, ok := r.blocks[id]; !ok {
+		return models.ErrNotFound
+	}
+	delete(r.blocks, id)
+	return nil
+}
+
+func (r *fakeBlockRepo) DeleteRack(id int64) error {
+	delete(r.racks, id)
+	return nil
+}
+
 // --- helper to create a TierAggregation at block scope (used in test setup) ---
 
 func blockAgg(blockID, deviceModelID int64, plane models.NetworkPlane) *models.TierAggregation {
@@ -898,6 +911,59 @@ func TestBlockService_PlaceSpineDevices(t *testing.T) {
 		}
 		if got := countSpinesInBlock(repo); got != 2 {
 			t.Errorf("want 2 spines total, got %d", got)
+		}
+	})
+}
+
+func TestBlockService_DeleteBlock(t *testing.T) {
+	newRepoWithBlock := func() (*fakeBlockRepo, *service.BlockService, int64) {
+		repo := newFakeBlockRepo()
+		svc := service.NewBlockService(repo)
+		block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "to-delete"})
+		return repo, svc, block.ID
+	}
+
+	t.Run("not found", func(t *testing.T) {
+		_, svc, _ := newRepoWithBlock()
+		err := svc.DeleteBlock(9999)
+		if !errors.Is(err, models.ErrNotFound) {
+			t.Errorf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("deletes block with no racks or aggs", func(t *testing.T) {
+		repo, svc, blockID := newRepoWithBlock()
+		if err := svc.DeleteBlock(blockID); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := repo.GetBlock(blockID); !errors.Is(err, models.ErrNotFound) {
+			t.Error("expected block to be deleted")
+		}
+	})
+
+	t.Run("cascades racks on delete", func(t *testing.T) {
+		repo, svc, blockID := newRepoWithBlock()
+		repo.CreateRack(&models.Rack{BlockID: &blockID, Name: "r1", HeightU: 42})
+		repo.CreateRack(&models.Rack{BlockID: &blockID, Name: "r2", HeightU: 42})
+		if err := svc.DeleteBlock(blockID); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		racks, _ := repo.ListRacksInBlock(blockID)
+		if len(racks) != 0 {
+			t.Errorf("expected 0 racks after delete, got %d", len(racks))
+		}
+	})
+
+	t.Run("cascades aggregations on delete", func(t *testing.T) {
+		repo, svc, blockID := newRepoWithBlock()
+		repo.SetAggregation(&models.TierAggregation{ScopeType: models.ScopeBlock, ScopeID: blockID, Plane: models.PlaneFrontEnd})
+		repo.SetAggregation(&models.TierAggregation{ScopeType: models.ScopeBlock, ScopeID: blockID, Plane: models.PlaneManagement})
+		if err := svc.DeleteBlock(blockID); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		aggs, _ := repo.ListAggregations(models.ScopeBlock, blockID)
+		if len(aggs) != 0 {
+			t.Errorf("expected 0 aggregations after delete, got %d", len(aggs))
 		}
 	})
 }

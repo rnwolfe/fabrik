@@ -32,6 +32,7 @@ type BlockService interface {
 	RemoveRackFromBlock(rackID int64) error
 	ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.TierPortConnection, error)
 	PlaceSpineDevices(blockID, spineModelID int64, count int) error
+	DeleteBlock(id int64) error
 }
 
 // BlockHandler handles HTTP requests for block and block aggregation resources.
@@ -446,6 +447,24 @@ func (h *BlockHandler) PlaceSpineDevices(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// DeleteBlock handles DELETE /api/blocks/{id}.
+func (h *BlockHandler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := h.svc.DeleteBlock(id); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "block not found")
+			return
+		}
+		slog.Error("delete block", "err", err, "blockID", id)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // parsePlane parses a network plane string from a path variable.

@@ -36,6 +36,7 @@ type RackRepository interface {
 	RemoveDevice(deviceID int64, compact bool) error
 	ListDevicesInRack(rackID int64) ([]*models.DeviceSummary, error)
 	GetDeviceModel(id int64) (*models.DeviceModel, error)
+	RemoveDevicesByRole(rackID int64, role models.DeviceRole) error
 }
 
 // ManagementPortAllocator is the interface for management port allocation,
@@ -655,6 +656,88 @@ func (s *RackService) RemoveDevice(rackID, deviceID int64, compact bool) error {
 		return fmt.Errorf("remove device %d: %w", deviceID, err)
 	}
 	slog.Info("device removed", "rackID", rackID, "deviceID", deviceID, "compact", compact)
+	return nil
+}
+
+// PlaceServerDevices places count server devices in a rack, replacing any existing servers.
+// Servers are placed from position 1 upward, stacking sequentially.
+func (s *RackService) PlaceServerDevices(rackID, serverModelID int64, count int) error {
+	if count < 0 {
+		return fmt.Errorf("%w: count must be >= 0", models.ErrConstraintViolation)
+	}
+	rack, err := s.rackRepo.Get(rackID)
+	if err != nil {
+		return fmt.Errorf("get rack %d: %w", rackID, err)
+	}
+	serverModel, err := s.rackRepo.GetDeviceModel(serverModelID)
+	if err != nil {
+		return fmt.Errorf("get server model %d: %w", serverModelID, err)
+	}
+	if serverModel.DeviceModelType != "server" {
+		return fmt.Errorf("%w: device model %d is not a server (type: %s)", models.ErrConstraintViolation, serverModelID, serverModel.DeviceModelType)
+	}
+	// Remove existing servers first.
+	if err := s.rackRepo.RemoveDevicesByRole(rackID, models.DeviceRoleServer); err != nil {
+		return fmt.Errorf("remove server devices from rack %d: %w", rackID, err)
+	}
+
+	// Re-read remaining devices (leaves, spines, etc.) to find occupied U ranges.
+	remaining, err := s.rackRepo.ListDevicesInRack(rackID)
+	if err != nil {
+		return fmt.Errorf("list devices in rack %d after server removal: %w", rackID, err)
+	}
+	// occupied[u] = true if slot u (1-based) is used by a non-server device.
+	occupied := make(map[int]bool, rack.HeightU)
+	for _, d := range remaining {
+		for u := d.Position; u < d.Position+d.HeightU; u++ {
+			occupied[u] = true
+		}
+	}
+
+	// Place servers from position 1 downward, skipping occupied slots.
+	placed := 0
+	pos := 1
+	for placed < count {
+		// Advance past occupied slots.
+		for pos <= rack.HeightU && occupied[pos] {
+			pos++
+		}
+		end := pos + serverModel.HeightU - 1
+		if end > rack.HeightU {
+			slog.Warn("rack full, truncating server placement", "rackID", rackID, "placed", placed, "requested", count)
+			break
+		}
+		// Check the entire span is free.
+		spanFree := true
+		for u := pos; u <= end; u++ {
+			if occupied[u] {
+				spanFree = false
+				pos = u + 1
+				break
+			}
+		}
+		if !spanFree {
+			continue
+		}
+		name := fmt.Sprintf("server-%d", placed+1)
+		_, err := s.rackRepo.PlaceDevice(&models.Device{
+			RackID:        rackID,
+			DeviceModelID: serverModel.ID,
+			Name:          name,
+			Role:          models.DeviceRoleServer,
+			Position:      pos,
+		})
+		if err != nil {
+			return fmt.Errorf("place server %s in rack %d: %w", name, rackID, err)
+		}
+		// Mark span as occupied for subsequent iterations.
+		for u := pos; u <= end; u++ {
+			occupied[u] = true
+		}
+		pos += serverModel.HeightU
+		placed++
+	}
+	slog.Info("server devices placed", "rackID", rackID, "serverModelID", serverModelID, "count", count)
 	return nil
 }
 
