@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Layers,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { blocksApi, scaffoldApi, superBlocksApi } from '@/api/blocks';
 import { racksApi } from '@/api/racks';
 import { catalogApi } from '@/api/catalog';
@@ -481,7 +482,7 @@ export default function DesignPage() {
         </div>
 
         {/* Right panel: Detail */}
-        <div className="flex-1 overflow-y-auto">
+        <div className={cn('flex-1', selectedRackId ? 'overflow-hidden' : 'overflow-y-auto')}>
           {selectedRackId ? (
             <RackElevation rackId={selectedRackId} />
           ) : selectedBlock ? (
