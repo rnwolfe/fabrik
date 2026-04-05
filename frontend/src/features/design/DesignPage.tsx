@@ -143,7 +143,6 @@ export default function DesignPage() {
 
   // Auto-select first block when blocks load. Calling setState inside an effect
   // is intentional here — we're syncing UI selection state with fetched data.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if ((blocks ?? []).length > 0 && !selectedBlockId) {
       setSelectedBlockId(blocks![0].id);
@@ -153,7 +152,6 @@ export default function DesignPage() {
       setSelectedRackId(null);
     }
   }, [blocks, selectedBlockId]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const selectedBlock = (blocks ?? []).find((b: Block) => b.id === selectedBlockId) ?? null;
 
@@ -168,7 +166,6 @@ export default function DesignPage() {
 
   // Initialize blockSpineModel / blockSpineCount from persisted data, but don't
   // clobber values the user has already set for this block in the current session.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!selectedBlock || !superBlockSpineAgg) return;
     const blockId = selectedBlock.id;
@@ -181,7 +178,6 @@ export default function DesignPage() {
       return new Map(prev).set(blockId, superBlockSpineAgg.spine_count);
     });
   }, [selectedBlock, superBlockSpineAgg, setBlockSpineModel, setBlockSpineCount]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Mutations ────────────────────────────────────────────────────────────
 

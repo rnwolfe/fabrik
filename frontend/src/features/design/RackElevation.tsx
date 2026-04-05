@@ -95,7 +95,7 @@ function RackConfig({
   rack,
   serverModels,
 }: {
-  rack: { role: string; height_u: number; used_u: number; available_u: number; power_capacity_w: number; used_watts_typical: number; devices?: DeviceSummary[] };
+  rack: { id: number; role: string; height_u: number; used_u: number; available_u: number; power_capacity_w: number; used_watts_typical: number; devices?: DeviceSummary[] };
   serverModels: DeviceModel[];
 }) {
   const queryClient = useQueryClient();
@@ -113,10 +113,10 @@ function RackConfig({
 
   const placeServersMutation = useMutation({
     mutationFn: ({ modelId, count }: { modelId: number; count: number }) =>
-      racksApi.placeServerDevices((rack as any).id, modelId, count),
+      racksApi.placeServerDevices(rack.id, modelId, count),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['racks'] });
-      queryClient.invalidateQueries({ queryKey: ['rack', (rack as any).id] });
+      queryClient.invalidateQueries({ queryKey: ['rack', rack.id] });
     },
   });
 
@@ -282,10 +282,11 @@ export default function RackElevation({ rackId }: RackElevationProps) {
     (d: DeviceModel) => d.device_model_type === 'server' && !d.archived_at
   );
 
-  // Clear device selection when switching racks.
-  if (rack && selectedDevice && !(rack.devices ?? []).some((d) => d.id === selectedDevice.id)) {
-    setSelectedDevice(null);
-  }
+  // Derive the effective selection: clear it if the device is no longer in the rack.
+  const effectiveDevice =
+    selectedDevice && (rack?.devices ?? []).some((d) => d.id === selectedDevice.id)
+      ? selectedDevice
+      : null;
 
   if (isLoading) {
     return (
@@ -329,7 +330,7 @@ export default function RackElevation({ rackId }: RackElevationProps) {
 
             if (dev) {
               const colorClass = ROLE_COLORS[dev.role] ?? ROLE_COLORS.other;
-              const isSelected = selectedDevice?.id === dev.id;
+              const isSelected = effectiveDevice?.id === dev.id;
               return (
                 <button
                   key={u}
@@ -399,10 +400,10 @@ export default function RackElevation({ rackId }: RackElevationProps) {
 
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto p-4">
-          {selectedDevice ? (
-            <DeviceDetail device={selectedDevice} onBack={() => setSelectedDevice(null)} />
+          {effectiveDevice ? (
+            <DeviceDetail device={effectiveDevice} onBack={() => setSelectedDevice(null)} />
           ) : (
-            <RackConfig rack={{ ...rack, id: rackId } as any} serverModels={serverModels} />
+            <RackConfig rack={{ ...rack, id: rackId }} serverModels={serverModels} />
           )}
         </div>
       </div>
