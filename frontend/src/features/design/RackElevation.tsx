@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, Zap, Box, Minus, Plus } from 'lucide-react';
+import { Server, Zap, Box, Minus, Plus, Cpu, ChevronLeft, GripVertical } from 'lucide-react';
 import { racksApi } from '@/api/racks';
 import { catalogApi } from '@/api/catalog';
 import { Button } from '@/components/ui/button';
@@ -33,82 +33,101 @@ interface RackElevationProps {
   rackId: number;
 }
 
-export default function RackElevation({ rackId }: RackElevationProps) {
+// ─── Device detail panel ──────────────────────────────────────────────────────
+
+function DeviceDetail({ device, onBack }: { device: DeviceSummary; onBack: () => void }) {
+  const colorClass = ROLE_COLORS[device.role] ?? ROLE_COLORS.other;
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="size-3" />
+        Back to rack
+      </button>
+
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Cpu className="size-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">{device.name}</span>
+        </div>
+        <Badge className={cn('text-[10px]', colorClass)}>{ROLE_LABELS[device.role] ?? device.role}</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-md bg-muted/50 px-2.5 py-2">
+          <p className="text-[10px] text-muted-foreground">Position</p>
+          <p className="text-sm font-semibold font-mono">U{device.position}</p>
+        </div>
+        <div className="rounded-md bg-muted/50 px-2.5 py-2">
+          <p className="text-[10px] text-muted-foreground">Height</p>
+          <p className="text-sm font-semibold font-mono">{device.height_u}U</p>
+        </div>
+        {device.power_watts_typical > 0 && (
+          <div className="rounded-md bg-muted/50 px-2.5 py-2">
+            <p className="text-[10px] text-muted-foreground">Power (typ)</p>
+            <p className="text-sm font-semibold font-mono">{device.power_watts_typical}W</p>
+          </div>
+        )}
+        {device.power_watts_max > 0 && (
+          <div className="rounded-md bg-muted/50 px-2.5 py-2">
+            <p className="text-[10px] text-muted-foreground">Power (max)</p>
+            <p className="text-sm font-semibold font-mono">{device.power_watts_max}W</p>
+          </div>
+        )}
+      </div>
+
+      {(device.model_vendor || device.model_name) && (
+        <div className="rounded-md border bg-muted/10 px-3 py-2 space-y-0.5">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Model</p>
+          {device.model_vendor && <p className="text-xs text-muted-foreground">{device.model_vendor}</p>}
+          {device.model_name && <p className="text-sm font-medium">{device.model_name}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Rack config panel (default right-side content) ───────────────────────────
+
+function RackConfig({
+  rack,
+  serverModels,
+}: {
+  rack: { role: string; height_u: number; used_u: number; available_u: number; power_capacity_w: number; used_watts_typical: number; devices?: DeviceSummary[] };
+  serverModels: DeviceModel[];
+}) {
   const queryClient = useQueryClient();
   const [serverModelId, setServerModelId] = useState<number | undefined>();
   const [serverCount, setServerCount] = useState(1);
 
-  // Fetch the full RackSummary (includes devices, used_u, available_u).
-  // allRacks comes from GET /api/racks which returns bare Rack (no summary fields),
-  // so we cannot use it as initialData — always fetch the individual summary.
-  const { data: rack, isLoading } = useQuery({
-    queryKey: ['rack', rackId],
-    queryFn: () => racksApi.get(rackId),
-  });
-
-  const { data: catalog } = useQuery({
-    queryKey: ['catalog'],
-    queryFn: catalogApi.list,
-  });
-
-  const serverModels = (catalog ?? []).filter(
-    (d: DeviceModel) => d.device_model_type === 'server' && !d.archived_at
-  );
-
-  const selectedServerModel = serverModels.find((d: DeviceModel) => d.id === serverModelId);
+  const selectedServerModel = serverModels.find((d) => d.id === serverModelId);
+  const maxServers = selectedServerModel
+    ? Math.floor(
+        (rack.available_u +
+          (rack.devices ?? []).filter((d) => d.role === 'server').reduce((s, d) => s + d.height_u, 0)) /
+          selectedServerModel.height_u
+      )
+    : 0;
 
   const placeServersMutation = useMutation({
     mutationFn: ({ modelId, count }: { modelId: number; count: number }) =>
-      racksApi.placeServerDevices(rackId, modelId, count),
+      racksApi.placeServerDevices((rack as any).id, modelId, count),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['racks'] });
-      queryClient.invalidateQueries({ queryKey: ['rack', rackId] });
+      queryClient.invalidateQueries({ queryKey: ['rack', (rack as any).id] });
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-4 p-4">
-        <div className="h-6 w-32 animate-pulse rounded bg-muted" />
-        <div className="grid grid-cols-3 gap-2">
-          {[1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-md bg-muted" />)}
-        </div>
-        <div className="h-64 animate-pulse rounded-lg bg-muted" />
-      </div>
-    );
-  }
-  if (!rack) return null;
-
-  // Build a map of top-slot → device for rendering.
-  // position = bottom U slot (lowest number); top slot = position + height_u - 1.
-  // We render the device block at the top slot so multi-U devices expand downward.
-  const devicesByTopSlot = new Map<number, DeviceSummary>();
-  for (const dev of rack.devices ?? []) {
-    devicesByTopSlot.set(dev.position + dev.height_u - 1, dev);
-  }
-
-  const heightU = rack.height_u;
-  const powerPct = rack.power_capacity_w > 0
-    ? Math.min(100, Math.round((rack.used_watts_typical / rack.power_capacity_w) * 100))
-    : 0;
-
-  // Max servers that fit given selected server model height
-  const maxServers = selectedServerModel
-    ? Math.floor((rack.available_u + (rack.devices ?? []).filter(d => d.role === 'server').reduce((s, d) => s + d.height_u, 0)) / selectedServerModel.height_u)
-    : 0;
+  const powerPct =
+    rack.power_capacity_w > 0
+      ? Math.min(100, Math.round((rack.used_watts_typical / rack.power_capacity_w) * 100))
+      : 0;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Box className="size-5 text-muted-foreground" />
-        <h3 className="text-sm font-semibold">{rack.name}</h3>
-        <Badge variant={rack.role === 'base' ? 'default' : 'secondary'} className="ml-auto text-[10px]">
-          {rack.role === 'base' ? 'Base (NET)' : 'Compute'}
-        </Badge>
-      </div>
-
-      {/* Stats row */}
+    <div className="space-y-4">
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-center">
           <p className="text-[10px] text-muted-foreground">Used</p>
@@ -118,65 +137,28 @@ export default function RackElevation({ rackId }: RackElevationProps) {
           <p className="text-[10px] text-muted-foreground">Free</p>
           <p className="text-sm font-semibold font-mono">{rack.available_u}U</p>
         </div>
-        <div className={cn('rounded-md px-2.5 py-1.5 text-center', powerPct > 90 ? 'bg-red-500/10' : powerPct > 75 ? 'bg-amber-500/10' : 'bg-muted/50')}>
-          <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5"><Zap className="size-2.5" />Power</p>
-          <p className={cn('text-sm font-semibold font-mono', powerPct > 90 ? 'text-red-600' : powerPct > 75 ? 'text-amber-600' : '')}>{powerPct}%</p>
+        <div
+          className={cn(
+            'rounded-md px-2.5 py-1.5 text-center',
+            powerPct > 90 ? 'bg-red-500/10' : powerPct > 75 ? 'bg-amber-500/10' : 'bg-muted/50'
+          )}
+        >
+          <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+            <Zap className="size-2.5" />
+            Power
+          </p>
+          <p
+            className={cn(
+              'text-sm font-semibold font-mono',
+              powerPct > 90 ? 'text-red-600' : powerPct > 75 ? 'text-amber-600' : ''
+            )}
+          >
+            {powerPct}%
+          </p>
         </div>
       </div>
 
-      {/* Rack elevation diagram */}
-      <div className="rounded-lg border border-border bg-muted/10 overflow-hidden">
-        {/* Top of rack label */}
-        <div className="border-b border-border px-2 py-1 bg-muted/30">
-          <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider text-center">Top of Rack</p>
-        </div>
-
-        {/* U slots — rendered top to bottom (highest U = top, matching physical rack convention) */}
-        <div className="flex flex-col">
-          {Array.from({ length: heightU }, (_, i) => heightU - i).map((u) => {
-            const dev = devicesByTopSlot.get(u);
-            if (dev) {
-              // Render device block at its top slot; block expands downward by height_u
-              const colorClass = ROLE_COLORS[dev.role] ?? ROLE_COLORS.other;
-              return (
-                <div
-                  key={u}
-                  className={cn('flex items-center px-2 gap-1.5 border-b border-border/40 font-mono text-[10px] font-medium', colorClass)}
-                  style={{ height: `${Math.max(20, dev.height_u * 20)}px` }}
-                >
-                  <span className="text-[9px] opacity-60 w-4 text-right shrink-0">{u}</span>
-                  <Server className="size-2.5 shrink-0 opacity-70" />
-                  <span className="truncate">{dev.name}</span>
-                  <span className="ml-auto opacity-60">{ROLE_LABELS[dev.role] ?? dev.role}</span>
-                </div>
-              );
-            }
-            // Check if this U is covered by a multi-U device whose top slot is above
-            const coveredBy = Array.from(devicesByTopSlot.entries()).find(
-              ([topSlot, d]) => topSlot > u && d.position <= u
-            );
-            if (coveredBy) return null; // rendered as part of the device block above
-
-            return (
-              <div
-                key={u}
-                className="flex items-center px-2 gap-1.5 border-b border-border/40 h-5"
-                style={{ height: '20px' }}
-              >
-                <span className="text-[9px] text-muted-foreground/40 font-mono w-4 text-right shrink-0">{u}</span>
-                <div className="flex-1 border-b border-dashed border-border/30" />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Bottom of rack label */}
-        <div className="border-t border-border px-2 py-1 bg-muted/30">
-          <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider text-center">Bottom of Rack</p>
-        </div>
-      </div>
-
-      {/* Server placement — only show for compute racks */}
+      {/* Server placement — compute racks only */}
       {rack.role === 'compute' && (
         <div className="space-y-3 border-t pt-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Server Placement</p>
@@ -236,7 +218,9 @@ export default function RackElevation({ rackId }: RackElevationProps) {
                 placeServersMutation.mutate({ modelId: serverModelId, count: serverCount });
               }}
             >
-              {placeServersMutation.isPending ? 'Placing…' : `Place ${serverCount} Server${serverCount !== 1 ? 's' : ''}`}
+              {placeServersMutation.isPending
+                ? 'Placing…'
+                : `Place ${serverCount} Server${serverCount !== 1 ? 's' : ''}`}
             </Button>
           )}
 
@@ -247,6 +231,181 @@ export default function RackElevation({ rackId }: RackElevationProps) {
           )}
         </div>
       )}
+
+      {/* Hint */}
+      <p className="text-[10px] text-muted-foreground/50 text-center pt-2">
+        Click a device in the rack to view its details.
+      </p>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+const MIN_VIZ_WIDTH = 140;
+const MAX_VIZ_WIDTH = 480;
+const DEFAULT_VIZ_WIDTH = 220;
+
+export default function RackElevation({ rackId }: RackElevationProps) {
+  const [selectedDevice, setSelectedDevice] = useState<DeviceSummary | null>(null);
+  const [vizWidth, setVizWidth] = useState(DEFAULT_VIZ_WIDTH);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startWidth: vizWidth };
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const next = Math.max(MIN_VIZ_WIDTH, Math.min(MAX_VIZ_WIDTH, dragRef.current.startWidth + e.clientX - dragRef.current.startX));
+      setVizWidth(next);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [vizWidth]);
+
+  const { data: rack, isLoading } = useQuery({
+    queryKey: ['rack', rackId],
+    queryFn: () => racksApi.get(rackId),
+  });
+
+  const { data: catalog } = useQuery({
+    queryKey: ['catalog'],
+    queryFn: catalogApi.list,
+  });
+
+  const serverModels = (catalog ?? []).filter(
+    (d: DeviceModel) => d.device_model_type === 'server' && !d.archived_at
+  );
+
+  // Clear device selection when switching racks.
+  if (rack && selectedDevice && !(rack.devices ?? []).some((d) => d.id === selectedDevice.id)) {
+    setSelectedDevice(null);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full">
+        <div className="shrink-0 border-r animate-pulse bg-muted/20" style={{ width: vizWidth }} />
+        <div className="flex-1 p-4 space-y-3">
+          <div className="h-5 w-32 animate-pulse rounded bg-muted" />
+          <div className="grid grid-cols-3 gap-2">
+            {[1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-md bg-muted" />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!rack) return null;
+
+  // Build a map of top-slot → device.
+  // position = bottom U slot; top slot = position + height_u - 1.
+  const devicesByTopSlot = new Map<number, DeviceSummary>();
+  for (const dev of rack.devices ?? []) {
+    devicesByTopSlot.set(dev.position + dev.height_u - 1, dev);
+  }
+
+  const heightU = rack.height_u;
+
+  return (
+    <div className="flex h-full overflow-hidden">
+      {/* ── Left: Rack visualization ─────────────────────────────────────── */}
+      <div className="shrink-0 border-r flex flex-col overflow-hidden bg-muted/10" style={{ width: vizWidth }}>
+        {/* Top label */}
+        <div className="border-b border-border px-2 py-1 bg-muted/30 shrink-0">
+          <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider text-center">
+            Top of Rack
+          </p>
+        </div>
+
+        {/* Slot column — flex fills height, each slot gets proportional space */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {Array.from({ length: heightU }, (_, i) => heightU - i).map((u) => {
+            const dev = devicesByTopSlot.get(u);
+
+            if (dev) {
+              const colorClass = ROLE_COLORS[dev.role] ?? ROLE_COLORS.other;
+              const isSelected = selectedDevice?.id === dev.id;
+              return (
+                <button
+                  key={u}
+                  style={{ flexGrow: dev.height_u, flexShrink: dev.height_u, flexBasis: 0 }}
+                  className={cn(
+                    'flex items-center px-1.5 gap-1 border-b border-border/40 font-mono text-[9px] font-medium w-full text-left transition-opacity',
+                    colorClass,
+                    isSelected ? 'ring-2 ring-inset ring-white/60' : 'hover:opacity-90'
+                  )}
+                  onClick={() => setSelectedDevice(isSelected ? null : dev)}
+                >
+                  <span className="opacity-60 shrink-0 w-3 text-right">{u}</span>
+                  <span className="truncate">{dev.name}</span>
+                </button>
+              );
+            }
+
+            // Check if covered by a multi-U device above
+            const coveredBy = Array.from(devicesByTopSlot.entries()).find(
+              ([topSlot, d]) => topSlot > u && d.position <= u
+            );
+            if (coveredBy) return null;
+
+            return (
+              <div
+                key={u}
+                style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
+                className="flex items-center px-1.5 gap-1 border-b border-border/20"
+              >
+                <span className="text-[8px] text-muted-foreground/30 font-mono w-3 text-right shrink-0">{u}</span>
+                <div className="flex-1 border-b border-dashed border-border/20" />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom label */}
+        <div className="border-t border-border px-2 py-1 bg-muted/30 shrink-0">
+          <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider text-center">
+            Bottom of Rack
+          </p>
+        </div>
+      </div>
+
+      {/* ── Resize handle ────────────────────────────────────────────────── */}
+      <div
+        onMouseDown={onDragStart}
+        className="w-1 shrink-0 hover:w-1.5 bg-border hover:bg-primary/40 cursor-col-resize flex items-center justify-center transition-all group"
+        title="Drag to resize"
+      >
+        <GripVertical className="size-3 text-muted-foreground/30 group-hover:text-primary/60 pointer-events-none" />
+      </div>
+
+      {/* ── Right: Config / detail panel ─────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Rack header — always visible */}
+        <div className="border-b border-border px-4 py-2.5 shrink-0 flex items-center gap-2">
+          <Box className="size-4 text-muted-foreground shrink-0" />
+          <h3 className="text-sm font-semibold truncate">{rack.name}</h3>
+          <Badge
+            variant={rack.role === 'base' ? 'default' : 'secondary'}
+            className="ml-auto shrink-0 text-[10px]"
+          >
+            {rack.role === 'base' ? 'Base (NET)' : 'Compute'}
+          </Badge>
+        </div>
+
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {selectedDevice ? (
+            <DeviceDetail device={selectedDevice} onBack={() => setSelectedDevice(null)} />
+          ) : (
+            <RackConfig rack={{ ...rack, id: rackId } as any} serverModels={serverModels} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

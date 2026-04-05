@@ -138,6 +138,11 @@ func (s *BlockService) CreateBlock(superBlockID int64, name, description string,
 
 		// Place spine devices in base racks only, alternating HA.
 		if spineModel != nil && spineCount > 0 {
+			// Adjust pos so the first spine's top slot clears the lowest leaf.
+			// pos currently points to the slot just below the last leaf's bottom.
+			// A spine of height H at position P occupies P..P+H-1, so to keep
+			// P+H-1 < lowestLeafPosition we need P = pos-(H-1).
+			pos -= spineModel.HeightU - 1
 			for si := 0; si < spineCount; si++ {
 				if si%2 != i-1 {
 					continue
@@ -590,6 +595,10 @@ func (s *BlockService) PlaceSpineDevices(blockID, spineModelID int64, count int)
 				pos = d.Position - 1
 			}
 		}
+		// Adjust for multi-U spines: pos is the slot just below the lowest
+		// existing device, but a spine of height H at position P occupies
+		// P..P+H-1. Subtract H-1 so the top slot clears all existing devices.
+		pos -= spineModel.HeightU - 1
 		if pos < 1 {
 			pos = 1
 		}
