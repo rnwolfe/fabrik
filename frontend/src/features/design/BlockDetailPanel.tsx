@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import DeviceModelPicker from '@/components/DeviceModelPicker';
+import { HelpLink } from '@/components/HelpLink';
 import ClosDiagram from './ClosDiagram';
 import type {
   Block,
@@ -199,6 +200,7 @@ export default function BlockDetailPanel({
           <Label className="text-xs flex items-center gap-1">
             <Server className="size-3" />
             Spine Count
+            <HelpLink article="radix" anchor="radix-in-clos-fabrics" />
           </Label>
           <div className="flex items-center gap-2">
             <Button
@@ -235,6 +237,7 @@ export default function BlockDetailPanel({
           <Label className="text-xs flex items-center gap-1">
             <ArrowUpDown className="size-3" />
             Oversubscription
+            <HelpLink article="oversubscription" anchor="leaf-spine-ratio" />
           </Label>
           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
             <p className="text-sm font-semibold">{topology.oversubscription.toFixed(1)}:1</p>
