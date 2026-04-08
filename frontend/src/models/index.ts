@@ -257,6 +257,22 @@ export interface DerivedFabric {
   tiers: DerivedTier[];
 }
 
+// Hierarchy tree types (returned by GET /api/designs/{id}/hierarchy)
+export interface HierarchyBlock extends Block {}
+
+export interface HierarchySuperBlock extends SuperBlock {
+  blocks: HierarchyBlock[];
+}
+
+export interface HierarchySite extends Site {
+  super_blocks: HierarchySuperBlock[];
+}
+
+export interface DesignHierarchy {
+  design_id: number;
+  sites: HierarchySite[];
+}
+
 export interface RackType {
   id: number;
   name: string;

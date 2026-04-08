@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { blocksApi, scaffoldApi, superBlocksApi } from '@/api/blocks';
+import { sitesApi } from '@/api/sites';
 import { racksApi } from '@/api/racks';
 import { catalogApi } from '@/api/catalog';
 import { designsApi } from '@/api/designs';
@@ -32,7 +33,8 @@ import BlockCard from './BlockCard';
 import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
 import RackElevation from './RackElevation';
-import type { Block, BlockAggregationSummary, RackSummary, DeviceModel } from '@/models';
+import HierarchyTree from './HierarchyTree';
+import type { Block, BlockAggregationSummary, RackSummary, DeviceModel, DesignHierarchy } from '@/models';
 
 // ─── New Block form schema ───────────────────────────────────────────────────
 
@@ -95,6 +97,16 @@ export default function DesignPage() {
     queryFn: () => scaffoldApi.get(activeDesignId!),
     enabled: !!activeDesignId,
   });
+
+  // Fetch hierarchy to detect if the design uses sites
+  const { data: hierarchy } = useQuery<DesignHierarchy>({
+    queryKey: ['hierarchy', activeDesignId],
+    queryFn: () => sitesApi.getHierarchy(activeDesignId!),
+    refetchInterval: 30_000,
+    enabled: !!activeDesignId,
+  });
+
+  const hasSites = (hierarchy?.sites ?? []).length > 0;
 
   const superBlockId = scaffold?.super_block_id;
 
@@ -417,63 +429,76 @@ export default function DesignPage() {
 
       {/* Two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel: Block canvas */}
+        {/* Left panel: Hierarchy tree (when sites exist) or flat block list */}
         <div className="flex flex-col w-80 shrink-0 border-r border-border overflow-y-auto bg-muted/20">
-          <div className="px-3 py-2">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-              Blocks
-            </span>
-          </div>
-
-          {(blocks ?? []).length === 0 ? (
-            <div className="flex flex-1 items-center justify-center p-4">
-              <div className="text-center">
-                <Layers className="size-8 text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">
-                  No blocks yet. Create one to start your design.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 text-xs"
-                  onClick={() => {
-                    blockReset({ name: 'Block 1' });
-                    setBlockDialogOpen(true);
-                  }}
-                >
-                  <Plus className="size-3 mr-1" />
-                  Create Block
-                </Button>
-              </div>
-            </div>
+          {hasSites ? (
+            <HierarchyTree
+              designId={activeDesignId!}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={(id) => {
+                setSelectedBlockId(id);
+                setSelectedRackId(null);
+              }}
+            />
           ) : (
-            <div className="flex flex-col gap-2 px-2 pb-4">
-              {(blocks ?? []).map((block: Block) => (
-                <BlockCard
-                  key={block.id}
-                  block={block}
-                  aggs={aggsByBlock?.get(block.id) ?? []}
-                  racks={racksByBlock.get(block.id) ?? []}
-                  isSelected={selectedBlockId === block.id}
-                  selectedRackId={selectedRackId}
-                  onSelect={() => {
-                    setSelectedBlockId(block.id);
-                    setSelectedRackId(null);
-                  }}
-                  onSelectRack={(rackId) => {
-                    setSelectedBlockId(block.id);
-                    setSelectedRackId(rackId);
-                  }}
-                  onAddRack={() => {
-                    const racks = racksByBlock.get(block.id) ?? [];
-                    rackReset({ name: `Rack ${racks.length + 1}` });
-                    setRackDialogBlockId(block.id);
-                  }}
-                  onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
-                  onDelete={() => setBlockToDelete(block)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                  Blocks
+                </span>
+              </div>
+
+              {(blocks ?? []).length === 0 ? (
+                <div className="flex flex-1 items-center justify-center p-4">
+                  <div className="text-center">
+                    <Layers className="size-8 text-muted-foreground/40 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">
+                      No blocks yet. Create one to start your design.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 text-xs"
+                      onClick={() => {
+                        blockReset({ name: 'Block 1' });
+                        setBlockDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="size-3 mr-1" />
+                      Create Block
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 px-2 pb-4">
+                  {(blocks ?? []).map((block: Block) => (
+                    <BlockCard
+                      key={block.id}
+                      block={block}
+                      aggs={aggsByBlock?.get(block.id) ?? []}
+                      racks={racksByBlock.get(block.id) ?? []}
+                      isSelected={selectedBlockId === block.id}
+                      selectedRackId={selectedRackId}
+                      onSelect={() => {
+                        setSelectedBlockId(block.id);
+                        setSelectedRackId(null);
+                      }}
+                      onSelectRack={(rackId) => {
+                        setSelectedBlockId(block.id);
+                        setSelectedRackId(rackId);
+                      }}
+                      onAddRack={() => {
+                        const racks = racksByBlock.get(block.id) ?? [];
+                        rackReset({ name: `Rack ${racks.length + 1}` });
+                        setRackDialogBlockId(block.id);
+                      }}
+                      onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
+                      onDelete={() => setBlockToDelete(block)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
 

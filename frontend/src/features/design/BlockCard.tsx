@@ -18,6 +18,7 @@ interface BlockCardProps {
   racks: RackSummary[];
   isSelected: boolean;
   selectedRackId: number | null;
+  superBlockName?: string;
   onSelect: () => void;
   onSelectRack: (rackId: number) => void;
   onAddRack: () => void;
@@ -31,6 +32,7 @@ export default function BlockCard({
   racks,
   isSelected,
   selectedRackId,
+  superBlockName,
   onSelect,
   onSelectRack,
   onAddRack,
@@ -76,6 +78,11 @@ export default function BlockCard({
 
         <Cpu className="size-4 text-blue-500 shrink-0" />
         <span className="text-sm font-medium truncate">{block.name}</span>
+        {superBlockName && (
+          <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0 text-violet-500 border-violet-500/30">
+            {superBlockName}
+          </Badge>
+        )}
 
         <div className="ml-auto flex items-center gap-1.5">
           {frontendAgg && (
