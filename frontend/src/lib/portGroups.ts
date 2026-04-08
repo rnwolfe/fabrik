@@ -16,3 +16,4 @@ export function portGroupSummary(dm: DeviceModel): string {
     .map((g) => `${g.count}×${g.speed_gbps}G`)
     .join(' + ');
 }
+// trigger
