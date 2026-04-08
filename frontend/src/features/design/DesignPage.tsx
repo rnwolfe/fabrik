@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import DeviceModelPicker, { PickerGuardProvider, usePickerGuard } from '@/components/DeviceModelPicker';
+
 import BlockCard from './BlockCard';
 import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
@@ -38,10 +38,6 @@ import type { Block, BlockAggregationSummary, RackSummary, DeviceModel } from '@
 
 const newBlockSchema = z.object({
   name: z.string().min(1, 'Name required'),
-  leaf_model_id: z.preprocess(
-    (v) => (v === '' || v == null ? undefined : Number(v)),
-    z.number().int().optional()
-  ),
 });
 type NewBlockForm = z.infer<typeof newBlockSchema>;
 
@@ -182,7 +178,7 @@ export default function DesignPage() {
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const createBlockMutation = useMutation({
-    mutationFn: (data: { super_block_id: number; name: string; leaf_model_id?: number }) =>
+    mutationFn: (data: { super_block_id: number; name: string }) =>
       blocksApi.create(data),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['blocks'] });
@@ -253,13 +249,22 @@ export default function DesignPage() {
     },
   });
 
+  const assignLeafMutation = useMutation({
+    mutationFn: ({ blockId, leafModelId }: { blockId: number; leafModelId: number }) =>
+      blocksApi.update(blockId, { leaf_model_id: leafModelId }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['aggs', variables.blockId] });
+      queryClient.invalidateQueries({ queryKey: ['aggs'] });
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+    },
+  });
+
   // ── Forms ────────────────────────────────────────────────────────────────
 
   const {
     register: blockRegister,
     handleSubmit: blockHandleSubmit,
     reset: blockReset,
-    setValue: blockSetValue,
   } = useForm<NewBlockForm>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(newBlockSchema) as any,
@@ -285,7 +290,6 @@ export default function DesignPage() {
     createBlockMutation.mutate({
       super_block_id: superBlockId,
       name: data.name,
-      leaf_model_id: data.leaf_model_id,
     });
   });
 
@@ -298,6 +302,13 @@ export default function DesignPage() {
       role: data.role,
     });
   });
+
+  const handleAssignLeaf = useCallback(
+    (blockId: number, leafModelId: number) => {
+      assignLeafMutation.mutate({ blockId, leafModelId });
+    },
+    [assignLeafMutation]
+  );
 
   const handleAssignSpine = useCallback(
     (blockId: number, deviceModelId: number, initialSpineCount: number) => {
@@ -491,6 +502,7 @@ export default function DesignPage() {
               spineCount={blockSpineCount.get(selectedBlock.id) ?? null}
               onSpineCountChange={(v) => handleSpineCountChange(selectedBlock.id, v)}
               onAssignSpine={(id, initialCount) => handleAssignSpine(selectedBlock.id, id, initialCount)}
+              onAssignLeaf={(id) => handleAssignLeaf(selectedBlock.id, id)}
             />
           ) : (
             <DesignSummary
@@ -503,17 +515,13 @@ export default function DesignPage() {
       </div>
 
       {/* ── New Block Dialog ─────────────────────────────────────────────── */}
-      <PickerGuardProvider>
-        <NewBlockDialogInner
-          open={blockDialogOpen}
-          onOpenChange={setBlockDialogOpen}
-          onSubmit={handleCreateBlock}
-          register={blockRegister}
-          isPending={createBlockMutation.isPending}
-          networkDevices={networkDevices}
-          onSelectLeaf={(id) => blockSetValue('leaf_model_id', id)}
-        />
-      </PickerGuardProvider>
+      <NewBlockDialogInner
+        open={blockDialogOpen}
+        onOpenChange={setBlockDialogOpen}
+        onSubmit={handleCreateBlock}
+        register={blockRegister}
+        isPending={createBlockMutation.isPending}
+      />
 
       {/* ── Delete Block Dialog ──────────────────────────────────────────── */}
       <Dialog open={blockToDelete !== null} onOpenChange={(open) => !open && setBlockToDelete(null)}>
@@ -602,35 +610,21 @@ export default function DesignPage() {
   );
 }
 
-// Extracted so usePickerGuard hook can be called inside PickerGuardProvider
 function NewBlockDialogInner({
   open,
   onOpenChange,
   onSubmit,
   register,
   isPending,
-  networkDevices,
-  onSelectLeaf,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
   register: ReturnType<typeof useForm<NewBlockForm>>['register'];
   isPending: boolean;
-  networkDevices: DeviceModel[];
-  onSelectLeaf: (id: number) => void;
 }) {
-  const pickerOpen = usePickerGuard();
-
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        // Don't close the dialog while the picker popover is open
-        if (!v && pickerOpen) return;
-        onOpenChange(v);
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New Block</DialogTitle>
@@ -639,18 +633,6 @@ function NewBlockDialogInner({
           <div className="space-y-1.5">
             <Label htmlFor="block-name">Name</Label>
             <Input id="block-name" {...register('name')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Leaf Switch</Label>
-            <DeviceModelPicker
-              devices={networkDevices}
-              onSelect={onSelectLeaf}
-              placeholder="Select leaf model…"
-              role="leaf"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              The leaf switch model determines port allocation and oversubscription.
-            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

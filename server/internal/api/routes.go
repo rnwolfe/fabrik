@@ -54,6 +54,7 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("POST /api/blocks", blocks.CreateBlock)
 	mux.HandleFunc("GET /api/blocks", blocks.ListBlocks)
 	mux.HandleFunc("GET /api/blocks/{id}", blocks.GetBlock)
+	mux.HandleFunc("PATCH /api/blocks/{id}", blocks.PatchBlock)
 	mux.HandleFunc("DELETE /api/blocks/{id}", blocks.DeleteBlock)
 
 	mux.HandleFunc("PUT /api/blocks/{id}/aggregations/{plane}", blocks.AssignAggregation)

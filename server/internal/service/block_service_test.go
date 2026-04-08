@@ -915,6 +915,79 @@ func TestBlockService_PlaceSpineDevices(t *testing.T) {
 	})
 }
 
+func TestBlockService_AssignLeafModel(t *testing.T) {
+	t.Run("assigns leaf model as front_end aggregation", func(t *testing.T) {
+		repo := newFakeBlockRepo()
+		svc := service.NewBlockService(repo)
+
+		block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "row-A"})
+		dm := repo.addDeviceModel(48)
+
+		summary, err := svc.AssignLeafModel(block.ID, dm.ID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if summary.DeviceModelID != dm.ID {
+			t.Errorf("expected device_model_id %d, got %d", dm.ID, summary.DeviceModelID)
+		}
+		if summary.Plane != models.NetworkPlaneFrontEnd {
+			t.Errorf("expected plane front_end, got %s", summary.Plane)
+		}
+		if summary.TotalPorts != 48 {
+			t.Errorf("expected total_ports 48, got %d", summary.TotalPorts)
+		}
+	})
+
+	t.Run("block not found returns ErrNotFound", func(t *testing.T) {
+		repo := newFakeBlockRepo()
+		svc := service.NewBlockService(repo)
+
+		dm := repo.addDeviceModel(48)
+		_, err := svc.AssignLeafModel(9999, dm.ID)
+		if !errors.Is(err, models.ErrNotFound) {
+			t.Errorf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("invalid leaf_model_id returns ErrConstraintViolation", func(t *testing.T) {
+		repo := newFakeBlockRepo()
+		svc := service.NewBlockService(repo)
+
+		block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "row-A"})
+		_, err := svc.AssignLeafModel(block.ID, 9999) // 9999 not in deviceModels
+		if !errors.Is(err, models.ErrConstraintViolation) {
+			t.Errorf("expected ErrConstraintViolation, got %v", err)
+		}
+	})
+
+	t.Run("preserves existing spine_count when re-assigning leaf model", func(t *testing.T) {
+		repo := newFakeBlockRepo()
+		svc := service.NewBlockService(repo)
+
+		block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "row-A"})
+		dm1 := repo.addDeviceModel(48)
+		dm2 := repo.addDeviceModel(64)
+
+		// Initial assignment with spine_count = 4.
+		_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm1.ID, 4)
+		if err != nil {
+			t.Fatalf("initial assign: %v", err)
+		}
+
+		// Reassign via AssignLeafModel — should preserve spine_count=4.
+		summary, err := svc.AssignLeafModel(block.ID, dm2.ID)
+		if err != nil {
+			t.Fatalf("assign leaf model: %v", err)
+		}
+		if summary.SpineCount != 4 {
+			t.Errorf("expected spine_count 4 preserved, got %d", summary.SpineCount)
+		}
+		if summary.DeviceModelID != dm2.ID {
+			t.Errorf("expected device_model_id %d, got %d", dm2.ID, summary.DeviceModelID)
+		}
+	})
+}
+
 func TestBlockService_DeleteBlock(t *testing.T) {
 	newRepoWithBlock := func() (*fakeBlockRepo, *service.BlockService, int64) {
 		repo := newFakeBlockRepo()
