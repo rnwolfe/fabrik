@@ -189,6 +189,7 @@ export default function BlockDetailPanel({
           onSelect={(id) => onAssignSpine(id, effectiveSpineCount)}
           placeholder="Select spine model…"
           triggerClassName="h-8 text-xs"
+          role="spine"
         />
       </div>
 
