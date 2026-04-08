@@ -258,7 +258,7 @@ export interface DerivedFabric {
 }
 
 // Hierarchy tree types (returned by GET /api/designs/{id}/hierarchy)
-export interface HierarchyBlock extends Block {}
+export type HierarchyBlock = Block;
 
 export interface HierarchySuperBlock extends SuperBlock {
   blocks: HierarchyBlock[];
