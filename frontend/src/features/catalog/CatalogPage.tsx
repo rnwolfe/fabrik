@@ -41,7 +41,14 @@ import type { DeviceModel, DeviceModelType } from '@/models';
 import DeviceForm, { deviceTypeLabels } from './DeviceForm';
 import type { DeviceFormValues } from './DeviceForm';
 import { suggestedRoles, roleBadgeLabel, roleBadgeVariant, type Role } from '@/lib/deviceRoles';
+import { portGroupSummary } from '@/lib/portGroups';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 /** Parse a comma-separated `speeds` query param into a Set of numbers. */
 export function parseSpeedsParam(param: string | null): Set<number> {
@@ -344,6 +351,7 @@ export default function CatalogPage() {
                 <TableHead>Model</TableHead>
                 <TableHead>Vendor</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Port groups</TableHead>
                 <TableHead>Roles</TableHead>
                 <TableHead className="text-right">Ports</TableHead>
                 <TableHead className="text-right">Height (U)</TableHead>
@@ -373,6 +381,20 @@ export default function CatalogPage() {
                       {deviceTypeLabels[device.device_model_type]}
                     </Badge>
                   </TableCell>
+                  <TableCell className="max-w-[180px]">
+                    {portGroupSummary(device) === '—' ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="block truncate text-sm font-mono cursor-default max-w-[160px]">
+                            {portGroupSummary(device)}
+                          </TooltipTrigger>
+                          <TooltipContent>{portGroupSummary(device)}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {suggestedRoles(device).map((role) => (
@@ -389,13 +411,7 @@ export default function CatalogPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
-                    {device.port_groups && device.port_groups.length > 0 ? (
-                      <span title={device.port_groups.map((pg) => `${pg.count}×${pg.speed_gbps}G`).join(' + ')}>
-                        {device.port_count}
-                      </span>
-                    ) : (
-                      device.port_count
-                    )}
+                    {device.port_count}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">{device.height_u}U</TableCell>
                   <TableCell className="text-right font-mono text-sm">{device.power_watts_typical}W</TableCell>
