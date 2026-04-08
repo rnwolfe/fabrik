@@ -33,6 +33,7 @@ type BlockService interface {
 	ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.TierPortConnection, error)
 	PlaceSpineDevices(blockID, spineModelID int64, count int) error
 	DeleteBlock(id int64) error
+	ReparentBlock(blockID, superBlockID int64) (*models.Block, error)
 }
 
 // BlockHandler handles HTTP requests for block and block aggregation resources.
@@ -465,6 +466,48 @@ func (h *BlockHandler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// patchBlockRequest allows partial updates to a block — currently just reparenting.
+type patchBlockRequest struct {
+	SuperBlockID *int64 `json:"super_block_id"`
+}
+
+// PatchBlock handles PATCH /api/blocks/{id}.
+func (h *BlockHandler) PatchBlock(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req patchBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.SuperBlockID == nil {
+		writeError(w, http.StatusBadRequest, "super_block_id is required")
+		return
+	}
+
+	b, err := h.svc.ReparentBlock(id, *req.SuperBlockID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "block not found")
+			return
+		}
+		slog.Error("reparent block", "err", err, "blockID", id)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, b)
 }
 
 // parsePlane parses a network plane string from a path variable.

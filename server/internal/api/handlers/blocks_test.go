@@ -187,6 +187,16 @@ func (s *fakeBlockService) DeleteBlock(id int64) error {
 	return nil
 }
 
+func (s *fakeBlockService) ReparentBlock(blockID, superBlockID int64) (*models.Block, error) {
+	b, ok := s.blocks[blockID]
+	if !ok {
+		return nil, models.ErrNotFound
+	}
+	b.SuperBlockID = superBlockID
+	s.blocks[blockID] = b
+	return b, nil
+}
+
 // --- helpers ---
 
 func blockRequest(t *testing.T, method, url string, body any) *http.Request {

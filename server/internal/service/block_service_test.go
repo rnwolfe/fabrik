@@ -303,6 +303,16 @@ func (r *fakeBlockRepo) DeleteRack(id int64) error {
 	return nil
 }
 
+func (r *fakeBlockRepo) ReparentBlock(blockID, superBlockID int64) (*models.Block, error) {
+	b, ok := r.blocks[blockID]
+	if !ok {
+		return nil, models.ErrNotFound
+	}
+	b.SuperBlockID = superBlockID
+	r.blocks[blockID] = b
+	return b, nil
+}
+
 // --- helper to create a TierAggregation at block scope (used in test setup) ---
 
 func blockAgg(blockID, deviceModelID int64, plane models.NetworkPlane) *models.TierAggregation {

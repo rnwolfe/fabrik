@@ -298,3 +298,23 @@ func (s *BlockStore) GetRack(id int64) (*models.Rack, error) {
 	}
 	return r, nil
 }
+
+// ReparentBlock updates the super_block_id for a block.
+func (s *BlockStore) ReparentBlock(blockID, superBlockID int64) (*models.Block, error) {
+	const q = `
+		UPDATE blocks SET super_block_id = ?,
+		updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		WHERE id = ?
+		RETURNING id, super_block_id, name, description, created_at, updated_at`
+
+	out := &models.Block{}
+	err := s.db.QueryRow(q, superBlockID, blockID).
+		Scan(&out.ID, &out.SuperBlockID, &out.Name, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reparent block %d: %w", blockID, err)
+	}
+	return out, nil
+}

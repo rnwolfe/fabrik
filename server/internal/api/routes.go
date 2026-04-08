@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes on mux.
-func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler, blocks *handlers.BlockHandler, management *handlers.ManagementHandler, capacity *handlers.CapacityHandler, metrics *handlers.MetricsHandler, deriveFabric *handlers.DeriveFabricHandler) {
+func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowledge *handlers.KnowledgeHandler, deviceModels *handlers.DeviceModelHandler, racks *handlers.RackHandler, fabrics *handlers.FabricHandler, blocks *handlers.BlockHandler, management *handlers.ManagementHandler, capacity *handlers.CapacityHandler, metrics *handlers.MetricsHandler, deriveFabric *handlers.DeriveFabricHandler, sites *handlers.SiteHandler, superBlocks *handlers.SuperBlockHandler) {
 	// Design CRUD
 	mux.HandleFunc("POST /api/designs", designs.Create)
 	mux.HandleFunc("GET /api/designs", designs.List)
@@ -51,9 +51,27 @@ func RegisterRoutes(mux *http.ServeMux, designs *handlers.DesignHandler, knowled
 	mux.HandleFunc("PUT /api/fabrics/{id}", fabrics.Update)
 	mux.HandleFunc("DELETE /api/fabrics/{id}", fabrics.Delete)
 
+	// Site CRUD
+	mux.HandleFunc("POST /api/designs/{designId}/sites", sites.CreateSite)
+	mux.HandleFunc("GET /api/designs/{designId}/sites", sites.ListSites)
+	mux.HandleFunc("GET /api/sites/{id}", sites.GetSite)
+	mux.HandleFunc("PUT /api/sites/{id}", sites.UpdateSite)
+	mux.HandleFunc("DELETE /api/sites/{id}", sites.DeleteSite)
+
+	// SuperBlock CRUD
+	mux.HandleFunc("POST /api/sites/{siteId}/superblocks", superBlocks.CreateSuperBlock)
+	mux.HandleFunc("GET /api/sites/{siteId}/superblocks", superBlocks.ListSuperBlocks)
+	mux.HandleFunc("GET /api/superblocks/{id}", superBlocks.GetSuperBlock)
+	mux.HandleFunc("PUT /api/superblocks/{id}", superBlocks.UpdateSuperBlock)
+	mux.HandleFunc("DELETE /api/superblocks/{id}", superBlocks.DeleteSuperBlock)
+
+	// Design hierarchy tree
+	mux.HandleFunc("GET /api/designs/{id}/hierarchy", sites.GetDesignHierarchy)
+
 	mux.HandleFunc("POST /api/blocks", blocks.CreateBlock)
 	mux.HandleFunc("GET /api/blocks", blocks.ListBlocks)
 	mux.HandleFunc("GET /api/blocks/{id}", blocks.GetBlock)
+	mux.HandleFunc("PATCH /api/blocks/{id}", blocks.PatchBlock)
 	mux.HandleFunc("DELETE /api/blocks/{id}", blocks.DeleteBlock)
 
 	mux.HandleFunc("PUT /api/blocks/{id}/aggregations/{plane}", blocks.AssignAggregation)

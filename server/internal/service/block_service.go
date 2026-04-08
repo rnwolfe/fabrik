@@ -43,6 +43,7 @@ type BlockRepository interface {
 	GetRack(id int64) (*models.Rack, error)
 	DeleteBlock(id int64) error
 	DeleteRack(id int64) error
+	ReparentBlock(blockID, superBlockID int64) (*models.Block, error)
 }
 
 // BlockService implements business logic for blocks and block-level aggregation.
@@ -699,6 +700,16 @@ func leafDeviceNames(devices []*models.Device) []string {
 		}
 	}
 	return names
+}
+
+// ReparentBlock moves a block to a different super-block.
+func (s *BlockService) ReparentBlock(blockID, superBlockID int64) (*models.Block, error) {
+	b, err := s.repo.ReparentBlock(blockID, superBlockID)
+	if err != nil {
+		return nil, fmt.Errorf("reparent block %d to super-block %d: %w", blockID, superBlockID, err)
+	}
+	slog.Info("block reparented", "blockID", blockID, "superBlockID", superBlockID)
+	return b, nil
 }
 
 // buildAggSummary constructs a TierAggregationSummary from an agg record and its device model.
