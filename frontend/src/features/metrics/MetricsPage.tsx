@@ -32,18 +32,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { FabricTier } from '@/models';
-
-function oversubColor(ratio: number) {
-  if (ratio <= 2) return 'text-green-600 dark:text-green-400';
-  if (ratio <= 4) return 'text-amber-600 dark:text-amber-400';
-  return 'text-red-600 dark:text-red-400';
-}
-
-function oversubBgColor(ratio: number) {
-  if (ratio <= 2) return 'bg-green-500';
-  if (ratio <= 4) return 'bg-amber-500';
-  return 'bg-red-500';
-}
+import { oversubColor, oversubBgColor } from './colors';
 
 export default function MetricsPage() {
   const { activeDesignId, setActiveDesignId } = useDesign();
