@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -23,6 +24,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Table,
   TableBody,
   TableCell,
@@ -36,11 +43,64 @@ import type { DeviceFormValues } from './DeviceForm';
 import { suggestedRoles, roleBadgeLabel, roleBadgeVariant, type Role } from '@/lib/deviceRoles';
 import { cn } from '@/lib/utils';
 
+/** Parse a comma-separated `speeds` query param into a Set of numbers. */
+export function parseSpeedsParam(param: string | null): Set<number> {
+  if (!param) return new Set();
+  return new Set(param.split(',').map(Number).filter((n) => !isNaN(n) && n > 0));
+}
+
+/** Collect distinct port speeds across all devices, sorted ascending. */
+export function collectSpeedOptions(devices: DeviceModel[]): number[] {
+  const speeds = new Set<number>();
+  for (const d of devices) {
+    for (const pg of d.port_groups ?? []) {
+      speeds.add(pg.speed_gbps);
+    }
+  }
+  return Array.from(speeds).sort((a, b) => a - b);
+}
+
+/** Returns true if the device matches the speed filter (OR within speeds). */
+export function deviceMatchesSpeed(device: DeviceModel, selectedSpeeds: Set<number>): boolean {
+  if (selectedSpeeds.size === 0) return true;
+  return (device.port_groups ?? []).some((pg) => selectedSpeeds.has(pg.speed_gbps));
+}
+
 export default function CatalogPage() {
   const [search, setSearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const speedsParam = searchParams.get('speeds');
+  const selectedSpeeds = useMemo(() => parseSpeedsParam(speedsParam), [speedsParam]);
+
+  const toggleSpeed = (speed: number) => {
+    const next = new Set(selectedSpeeds);
+    if (next.has(speed)) {
+      next.delete(speed);
+    } else {
+      next.add(speed);
+    }
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next.size === 0) {
+        params.delete('speeds');
+      } else {
+        params.set('speeds', Array.from(next).sort((a, b) => a - b).join(','));
+      }
+      return params;
+    });
+  };
+
+  const clearSpeeds = () => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.delete('speeds');
+      return params;
+    });
+  };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDevice, setEditDevice] = useState<DeviceModel | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeviceModel | null>(null);
@@ -117,6 +177,8 @@ export default function CatalogPage() {
     [activeDevices]
   );
 
+  const speedOptions = useMemo(() => collectSpeedOptions(activeDevices), [activeDevices]);
+
   const filtered = useMemo(() => {
     return activeDevices.filter((d) => {
       const matchSearch =
@@ -134,12 +196,13 @@ export default function CatalogPage() {
           matchRole = roles.includes(roleFilter as Role);
         }
       }
-      return matchSearch && matchVendor && matchType && matchRole;
+      return matchSearch && matchVendor && matchType && matchRole && deviceMatchesSpeed(d, selectedSpeeds);
     });
-  }, [activeDevices, search, vendorFilter, typeFilter, roleFilter]);
+  }, [activeDevices, search, vendorFilter, typeFilter, roleFilter, selectedSpeeds]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
   const mutationError = createMutation.error ?? updateMutation.error;
+  const hasActiveFilters = !!(search || vendorFilter !== 'all' || typeFilter !== 'all' || roleFilter !== 'all' || selectedSpeeds.size > 0);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -202,6 +265,50 @@ export default function CatalogPage() {
             <SelectItem value="none">No role</SelectItem>
           </SelectContent>
         </Select>
+        {speedOptions.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex h-9 w-[140px] items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm font-normal ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              aria-label="Port speed filter"
+            >
+              {selectedSpeeds.size === 0
+                ? 'All speeds'
+                : selectedSpeeds.size === 1
+                ? `${Array.from(selectedSpeeds)[0]}G`
+                : `${selectedSpeeds.size} speeds`}
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[140px]">
+              {speedOptions.map((speed) => (
+                <DropdownMenuCheckboxItem
+                  key={speed}
+                  checked={selectedSpeeds.has(speed)}
+                  onCheckedChange={() => toggleSpeed(speed)}
+                >
+                  {speed}G
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs"
+            onClick={() => {
+              setSearch('');
+              setVendorFilter('all');
+              setTypeFilter('all');
+              setRoleFilter('all');
+              clearSpeeds();
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
         {filtered.length !== activeDevices.length && (
           <span className="text-xs text-muted-foreground">
             {filtered.length} of {activeDevices.length} devices
@@ -218,14 +325,10 @@ export default function CatalogPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Database}
-          title={search || vendorFilter !== 'all' || typeFilter !== 'all' || roleFilter !== 'all' ? 'No matching devices' : 'No devices in catalog'}
-          description={
-            search || vendorFilter !== 'all' || typeFilter !== 'all' || roleFilter !== 'all'
-              ? 'Try adjusting your filters'
-              : 'Add your first device model to get started'
-          }
+          title={hasActiveFilters ? 'No matching devices' : 'No devices in catalog'}
+          description={hasActiveFilters ? 'Try adjusting your filters' : 'Add your first device model to get started'}
           action={
-            !search && vendorFilter === 'all' && typeFilter === 'all' && roleFilter === 'all' ? (
+            !hasActiveFilters ? (
               <Button onClick={openCreate}>
                 <Plus className="size-4" />
                 Add device
