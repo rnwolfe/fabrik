@@ -274,6 +274,18 @@ func (s *RackService) GetRackSummary(id int64) (*models.RackSummary, error) {
 		Devices:          devices,
 	}
 
+	// RU overflow warning.
+	if usedU > rack.HeightU {
+		deltaU := usedU - rack.HeightU
+		detail := fmt.Sprintf("rack is over capacity: %dU used / %dU total (overflow by %dU)", usedU, rack.HeightU, deltaU)
+		summary.Warnings = append(summary.Warnings, models.RackWarning{
+			Kind:   models.RackWarningKindRU,
+			Detail: detail,
+			DeltaU: &deltaU,
+		})
+		summary.Warning = detail
+	}
+
 	// Power warning: typical draw against warn threshold.
 	if rack.PowerCapacityW > 0 {
 		warnPct := rack.PowerOversubPctWarn
@@ -282,8 +294,17 @@ func (s *RackService) GetRackSummary(id int64) (*models.RackSummary, error) {
 		}
 		warnLimit := rack.PowerCapacityW * warnPct / 100
 		if usedTypical > warnLimit {
-			summary.Warning = fmt.Sprintf("power utilization at %.0f%% of capacity (%dW typical / %dW capacity)",
+			deltaW := usedTypical - warnLimit
+			detail := fmt.Sprintf("power utilization at %.0f%% of capacity (%dW typical / %dW capacity)",
 				float64(usedTypical)/float64(rack.PowerCapacityW)*100, usedTypical, rack.PowerCapacityW)
+			summary.Warnings = append(summary.Warnings, models.RackWarning{
+				Kind:   models.RackWarningKindPower,
+				Detail: detail,
+				DeltaW: &deltaW,
+			})
+			if summary.Warning == "" {
+				summary.Warning = detail
+			}
 		}
 	}
 

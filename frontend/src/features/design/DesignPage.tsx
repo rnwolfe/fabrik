@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -62,10 +63,17 @@ type AddRackForm = z.infer<typeof addRackSchema>;
 export default function DesignPage() {
   const { activeDesignId, setActiveDesignId } = useDesign();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Selection state
   const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null);
   const [selectedRackId, setSelectedRackId] = useState<number | null>(null);
+
+  // Deep-link toast notification
+  const [deepLinkToast, setDeepLinkToast] = useState<string | null>(null);
+
+  // Whether we've already processed the ?block= deep-link param this mount
+  const deepLinkHandled = useRef(false);
 
   // Dialog state
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
@@ -152,6 +160,38 @@ export default function DesignPage() {
       setSelectedRackId(null);
     }
   }, [blocks, selectedBlockId]);
+
+  // Deep-link: read ?block=<id> on mount (once blocks are loaded), select that block,
+  // scroll its card into view, and remove the param from the URL.
+  const blockCardRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    const blockParam = searchParams.get('block');
+    if (!blockParam || !blocks) return;
+    const targetId = Number(blockParam);
+    if (isNaN(targetId)) {
+      // Malformed param — remove it silently.
+      setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('block'); return next; }, { replace: true });
+      deepLinkHandled.current = true;
+      return;
+    }
+    const found = blocks.find((b) => b.id === targetId);
+    if (!found) {
+      setDeepLinkToast(`Block #${targetId} not found in this design.`);
+      setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('block'); return next; }, { replace: true });
+      deepLinkHandled.current = true;
+      return;
+    }
+    setSelectedBlockId(targetId);
+    setSelectedRackId(null);
+    // Scroll the block card into view after the next paint.
+    setTimeout(() => {
+      const el = blockCardRefs.current.get(targetId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('block'); return next; }, { replace: true });
+    deepLinkHandled.current = true;
+  }, [blocks, searchParams, setSearchParams]);
 
   const selectedBlock = (blocks ?? []).find((b: Block) => b.id === selectedBlockId) ?? null;
 
@@ -449,29 +489,33 @@ export default function DesignPage() {
           ) : (
             <div className="flex flex-col gap-2 px-2 pb-4">
               {(blocks ?? []).map((block: Block) => (
-                <BlockCard
+                <div
                   key={block.id}
-                  block={block}
-                  aggs={aggsByBlock?.get(block.id) ?? []}
-                  racks={racksByBlock.get(block.id) ?? []}
-                  isSelected={selectedBlockId === block.id}
-                  selectedRackId={selectedRackId}
-                  onSelect={() => {
-                    setSelectedBlockId(block.id);
-                    setSelectedRackId(null);
-                  }}
-                  onSelectRack={(rackId) => {
-                    setSelectedBlockId(block.id);
-                    setSelectedRackId(rackId);
-                  }}
-                  onAddRack={() => {
-                    const racks = racksByBlock.get(block.id) ?? [];
-                    rackReset({ name: `Rack ${racks.length + 1}` });
-                    setRackDialogBlockId(block.id);
-                  }}
-                  onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
-                  onDelete={() => setBlockToDelete(block)}
-                />
+                  ref={(el) => { blockCardRefs.current.set(block.id, el); }}
+                >
+                  <BlockCard
+                    block={block}
+                    aggs={aggsByBlock?.get(block.id) ?? []}
+                    racks={racksByBlock.get(block.id) ?? []}
+                    isSelected={selectedBlockId === block.id}
+                    selectedRackId={selectedRackId}
+                    onSelect={() => {
+                      setSelectedBlockId(block.id);
+                      setSelectedRackId(null);
+                    }}
+                    onSelectRack={(rackId) => {
+                      setSelectedBlockId(block.id);
+                      setSelectedRackId(rackId);
+                    }}
+                    onAddRack={() => {
+                      const racks = racksByBlock.get(block.id) ?? [];
+                      rackReset({ name: `Rack ${racks.length + 1}` });
+                      setRackDialogBlockId(block.id);
+                    }}
+                    onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
+                    onDelete={() => setBlockToDelete(block)}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -598,6 +642,24 @@ export default function DesignPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Deep-link toast: non-existent block notification */}
+      {deepLinkToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-3 shadow-lg text-sm"
+        >
+          <span className="text-muted-foreground">{deepLinkToast}</span>
+          <button
+            onClick={() => setDeepLinkToast(null)}
+            className="ml-2 text-muted-foreground hover:text-foreground"
+            aria-label="Dismiss notification"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

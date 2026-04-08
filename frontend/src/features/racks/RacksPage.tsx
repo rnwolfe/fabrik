@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,6 +21,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Select,
@@ -36,7 +43,67 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { RackType, RackSummary } from '@/models';
+import type { RackType, RackSummary, RackWarning } from '@/models';
+
+/** Short display label for each warning kind. */
+const warningKindLabel: Record<RackWarning['kind'], string> = {
+  power: 'Power',
+  ru: 'RU',
+  port: 'Port',
+};
+
+/**
+ * Renders one badge per structured warning. Each badge shows a short label and a
+ * tooltip with the full detail message. If the rack belongs to a block, clicking
+ * the badge navigates to the Design page with that block pre-selected.
+ */
+function RackWarningBadges({ rack }: { rack: RackSummary }) {
+  const warnings = rack.warnings;
+  if (!warnings || warnings.length === 0) {
+    // Fall back to legacy string warning for backwards compatibility.
+    if (!rack.warning) return null;
+    return (
+      <Badge variant="destructive" className="text-[10px]">
+        warning
+      </Badge>
+    );
+  }
+
+  return (
+    <TooltipProvider>
+      {warnings.map((w, i) => {
+        const label = warningKindLabel[w.kind] ?? w.kind;
+        const badgeEl = (
+          <Badge variant="destructive" className="cursor-pointer text-[10px]">
+            {label}
+          </Badge>
+        );
+
+        if (rack.block_id) {
+          return (
+            <Tooltip key={i}>
+              <TooltipTrigger>
+                <Link
+                  to={`/design?block=${rack.block_id}`}
+                  aria-label={`Go to block containing this rack (${w.kind} warning)`}
+                >
+                  {badgeEl}
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px] text-xs">{w.detail}</TooltipContent>
+            </Tooltip>
+          );
+        }
+        return (
+          <Tooltip key={i}>
+            <TooltipTrigger>{badgeEl}</TooltipTrigger>
+            <TooltipContent className="max-w-[260px] text-xs">{w.detail}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </TooltipProvider>
+  );
+}
 
 const rackTypeSchema = z.object({
   name: z.string().min(1, 'Name required'),
@@ -306,9 +373,7 @@ export default function RacksPage() {
                             )}
                           </button>
                           <span className="font-medium">{rack.name}</span>
-                          {rack.warning && (
-                            <Badge variant="destructive" className="text-[10px]">warning</Badge>
-                          )}
+                          <RackWarningBadges rack={rack} />
                         </div>
                         {rack.description && (
                           <p className="ml-5 text-xs text-muted-foreground">{rack.description}</p>
