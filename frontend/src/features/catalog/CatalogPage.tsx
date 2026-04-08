@@ -33,11 +33,14 @@ import {
 import type { DeviceModel, DeviceModelType } from '@/models';
 import DeviceForm, { deviceTypeLabels } from './DeviceForm';
 import type { DeviceFormValues } from './DeviceForm';
+import { suggestedRoles, roleBadgeLabel, roleBadgeVariant, type Role } from '@/lib/deviceRoles';
+import { cn } from '@/lib/utils';
 
 export default function CatalogPage() {
   const [search, setSearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDevice, setEditDevice] = useState<DeviceModel | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeviceModel | null>(null);
@@ -122,9 +125,18 @@ export default function CatalogPage() {
         d.model.toLowerCase().includes(search.toLowerCase());
       const matchVendor = vendorFilter === 'all' || d.vendor === vendorFilter;
       const matchType = typeFilter === 'all' || d.device_model_type === typeFilter;
-      return matchSearch && matchVendor && matchType;
+      let matchRole = true;
+      if (roleFilter !== 'all') {
+        const roles = suggestedRoles(d);
+        if (roleFilter === 'none') {
+          matchRole = roles.length === 0;
+        } else {
+          matchRole = roles.includes(roleFilter as Role);
+        }
+      }
+      return matchSearch && matchVendor && matchType && matchRole;
     });
-  }, [activeDevices, search, vendorFilter, typeFilter]);
+  }, [activeDevices, search, vendorFilter, typeFilter, roleFilter]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
   const mutationError = createMutation.error ?? updateMutation.error;
@@ -178,6 +190,18 @@ export default function CatalogPage() {
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v ?? 'all')}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="All roles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All roles</SelectItem>
+            <SelectItem value="leaf">Leaf</SelectItem>
+            <SelectItem value="spine">Spine</SelectItem>
+            <SelectItem value="super-spine">Super-spine</SelectItem>
+            <SelectItem value="none">No role</SelectItem>
+          </SelectContent>
+        </Select>
         {filtered.length !== activeDevices.length && (
           <span className="text-xs text-muted-foreground">
             {filtered.length} of {activeDevices.length} devices
@@ -194,14 +218,14 @@ export default function CatalogPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Database}
-          title={search || vendorFilter !== 'all' || typeFilter !== 'all' ? 'No matching devices' : 'No devices in catalog'}
+          title={search || vendorFilter !== 'all' || typeFilter !== 'all' || roleFilter !== 'all' ? 'No matching devices' : 'No devices in catalog'}
           description={
-            search || vendorFilter !== 'all' || typeFilter !== 'all'
+            search || vendorFilter !== 'all' || typeFilter !== 'all' || roleFilter !== 'all'
               ? 'Try adjusting your filters'
               : 'Add your first device model to get started'
           }
           action={
-            !search && vendorFilter === 'all' && typeFilter === 'all' ? (
+            !search && vendorFilter === 'all' && typeFilter === 'all' && roleFilter === 'all' ? (
               <Button onClick={openCreate}>
                 <Plus className="size-4" />
                 Add device
@@ -217,6 +241,7 @@ export default function CatalogPage() {
                 <TableHead>Model</TableHead>
                 <TableHead>Vendor</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Roles</TableHead>
                 <TableHead className="text-right">Ports</TableHead>
                 <TableHead className="text-right">Height (U)</TableHead>
                 <TableHead className="text-right">Power (W typ)</TableHead>
@@ -244,6 +269,21 @@ export default function CatalogPage() {
                     <Badge variant="outline" className="text-[10px]">
                       {deviceTypeLabels[device.device_model_type]}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {suggestedRoles(device).map((role) => (
+                        <span
+                          key={role}
+                          className={cn(
+                            'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
+                            roleBadgeVariant[role],
+                          )}
+                        >
+                          {roleBadgeLabel[role]}
+                        </span>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {device.port_groups && device.port_groups.length > 0 ? (

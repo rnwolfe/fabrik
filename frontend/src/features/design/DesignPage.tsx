@@ -646,6 +646,7 @@ function NewBlockDialogInner({
               devices={networkDevices}
               onSelect={onSelectLeaf}
               placeholder="Select leaf model…"
+              role="leaf"
             />
             <p className="text-[11px] text-muted-foreground">
               The leaf switch model determines port allocation and oversubscription.

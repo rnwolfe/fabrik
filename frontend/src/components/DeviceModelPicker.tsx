@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/command';
 import type { DeviceModel } from '@/models';
 import CreateDeviceSheet from './CreateDeviceSheet';
+import { suggestedRoles, roleBadgeLabel, roleBadgeVariant, type Role } from '@/lib/deviceRoles';
 
 function portGroupSummary(dm: DeviceModel): string {
   const groups = dm.port_groups;
@@ -56,6 +57,21 @@ export function usePickerGuard() {
   return ctx?.pickerOpen ?? false;
 }
 
+// ── Role badge ─────────────────────────────────────────────────────────────────
+
+function RoleBadge({ role }: { role: Role }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium leading-none',
+        roleBadgeVariant[role],
+      )}
+    >
+      {roleBadgeLabel[role]}
+    </span>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface DeviceModelPickerProps {
@@ -65,6 +81,8 @@ interface DeviceModelPickerProps {
   placeholder?: string;
   className?: string;
   triggerClassName?: string;
+  /** When provided, devices that don't match the role are de-emphasized (grayed, pushed to bottom) but remain selectable. */
+  role?: Role;
 }
 
 export default function DeviceModelPicker({
@@ -74,6 +92,7 @@ export default function DeviceModelPicker({
   placeholder = 'Select device model…',
   className,
   triggerClassName,
+  role,
 }: DeviceModelPickerProps) {
   const [open, setOpenRaw] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -115,6 +134,14 @@ export default function DeviceModelPicker({
     [handleSelect],
   );
 
+  // Sort: role-matching devices first, then non-matching.
+  const sortedDevices = role
+    ? [
+        ...devices.filter((d) => suggestedRoles(d).includes(role)),
+        ...devices.filter((d) => !suggestedRoles(d).includes(role)),
+      ]
+    : devices;
+
   return (
     <>
       <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -152,42 +179,52 @@ export default function DeviceModelPicker({
                 <CommandList>
                   <CommandEmpty>No devices found.</CommandEmpty>
                   <CommandGroup>
-                    {devices.map((dm) => (
-                      <CommandItem
-                        key={dm.id}
-                        value={`${dm.vendor} ${dm.model} ${dm.description}`}
-                        onSelect={() => handleSelect(dm.id)}
-                        data-checked={effectiveValue === dm.id ? 'true' : undefined}
-                      >
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium truncate">
-                              {dm.vendor} {dm.model}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span>{portGroupSummary(dm)}</span>
-                            {dm.power_watts_typical > 0 && (
-                              <>
-                                <span className="text-border">·</span>
-                                <span>{dm.power_watts_typical}W</span>
-                              </>
+                    {sortedDevices.map((dm) => {
+                      const dmRoles = suggestedRoles(dm);
+                      const isDeemphasized = role !== undefined && !dmRoles.includes(role);
+                      return (
+                        <CommandItem
+                          key={dm.id}
+                          value={`${dm.vendor} ${dm.model} ${dm.description}`}
+                          onSelect={() => handleSelect(dm.id)}
+                          data-checked={effectiveValue === dm.id ? 'true' : undefined}
+                          className={cn(isDeemphasized && 'opacity-40')}
+                        >
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium truncate">
+                                {dm.vendor} {dm.model}
+                              </span>
+                              <div className="flex items-center gap-1 ml-auto shrink-0">
+                                {dmRoles.map((r) => (
+                                  <RoleBadge key={r} role={r} />
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                              <span>{portGroupSummary(dm)}</span>
+                              {dm.power_watts_typical > 0 && (
+                                <>
+                                  <span className="text-border">·</span>
+                                  <span>{dm.power_watts_typical}W</span>
+                                </>
+                              )}
+                              {dm.height_u > 0 && (
+                                <>
+                                  <span className="text-border">·</span>
+                                  <span>{dm.height_u}U</span>
+                                </>
+                              )}
+                            </div>
+                            {dm.description && (
+                              <p className="text-[10px] text-muted-foreground/70 truncate">
+                                {dm.description}
+                              </p>
                             )}
-                            {dm.height_u > 0 && (
-                              <>
-                                <span className="text-border">·</span>
-                                <span>{dm.height_u}U</span>
-                              </>
-                            )}
                           </div>
-                          {dm.description && (
-                            <p className="text-[10px] text-muted-foreground/70 truncate">
-                              {dm.description}
-                            </p>
-                          )}
-                        </div>
-                      </CommandItem>
-                    ))}
+                        </CommandItem>
+                      );
+                    })}
                   </CommandGroup>
                   <CommandSeparator />
                   <CommandGroup>
