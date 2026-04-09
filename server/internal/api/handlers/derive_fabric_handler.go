@@ -34,7 +34,7 @@ func (h *DeriveFabricHandler) GetDerivedFabric(w http.ResponseWriter, r *http.Re
 
 	df, err := h.svc.DeriveFabric(id, models.PlaneFrontEnd)
 	if errors.Is(err, models.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "design not found")
+		writeDomainError(w, http.StatusNotFound, err)
 		return
 	}
 	if err != nil {
