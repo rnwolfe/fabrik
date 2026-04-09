@@ -102,6 +102,7 @@ these values will reflect live or sampled traffic statistics.
 
 ## Related Topics
 
+- [Design Hierarchy](hierarchy.md) — site, super-block (pod), block, fabric, leaf, spine, super-spine glossary
 - [Device Catalog](device-catalog.md) — assign hardware models to fabric roles
 - [Management Network](management-network.md) — out-of-band network overlay
 - [Power & Capacity](power-capacity.md) — per-rack power budgets and RU utilization
