@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useMemo,
+  useEffect,
   useCallback,
   type ReactNode,
 } from 'react';
@@ -19,8 +20,12 @@ function readStoredId(): number | null {
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (typeof parsed === 'number' && Number.isFinite(parsed)) return parsed;
+    // Corrupt value — clean it up
+    localStorage.removeItem(LS_ACTIVE_KEY);
     return null;
   } catch {
+    // Parse failed — clean up the corrupt entry
+    localStorage.removeItem(LS_ACTIVE_KEY);
     return null;
   }
 }
@@ -34,7 +39,16 @@ function readStoredRecent(): number[] {
       Array.isArray(parsed) &&
       parsed.every((x) => typeof x === 'number' && Number.isFinite(x))
     ) {
-      return parsed as number[];
+      const trimmed = (parsed as number[]).slice(0, RECENT_MAX);
+      // Re-persist trimmed list if it was oversized
+      if (trimmed.length < parsed.length) {
+        try {
+          localStorage.setItem(LS_RECENT_KEY, JSON.stringify(trimmed));
+        } catch {
+          // Ignore storage errors on re-persist
+        }
+      }
+      return trimmed;
     }
     return [];
   } catch {
@@ -71,30 +85,49 @@ export function DesignProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  // Derive the validated active ID: once designs have loaded, clear any stored ID
-  // that doesn't correspond to a known design. No setState needed in useEffect.
+  // Derive the validated active ID: show stored value optimistically until designs load.
   const activeDesignId = useMemo<number | null>(() => {
     if (!isSuccess) return storedId; // not yet validated — show stored value optimistically
     if (storedId === null) return null;
     const valid = designs.some((d) => d.id === storedId);
-    if (!valid) {
-      // Silently clean up stale localStorage entry (side effect in memo is intentional
-      // here — it's a write to an external system, not setState)
-      localStorage.removeItem(LS_ACTIVE_KEY);
-      return null;
-    }
-    return storedId;
+    return valid ? storedId : null;
   }, [storedId, isSuccess, designs]);
+
+  // Clean up stale localStorage entry when designs have loaded and stored ID is invalid.
+  // Only touches the external system (localStorage); does not call setState.
+  useEffect(() => {
+    if (!isSuccess || storedId === null) return;
+    const valid = designs.some((d) => d.id === storedId);
+    if (!valid) {
+      try {
+        localStorage.removeItem(LS_ACTIVE_KEY);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [isSuccess, designs, storedId]);
 
   const setActiveDesignId = useCallback((id: number | null) => {
     setStoredId(id);
     if (id === null) {
-      localStorage.removeItem(LS_ACTIVE_KEY);
+      try {
+        localStorage.removeItem(LS_ACTIVE_KEY);
+      } catch {
+        // Ignore storage errors (quota exceeded, private mode, etc.)
+      }
     } else {
-      localStorage.setItem(LS_ACTIVE_KEY, JSON.stringify(id));
+      try {
+        localStorage.setItem(LS_ACTIVE_KEY, JSON.stringify(id));
+      } catch {
+        // Ignore storage errors
+      }
       setRecentDesignIds((prev) => {
         const next = pushRecent(id, prev);
-        localStorage.setItem(LS_RECENT_KEY, JSON.stringify(next));
+        try {
+          localStorage.setItem(LS_RECENT_KEY, JSON.stringify(next));
+        } catch {
+          // Ignore storage errors
+        }
         return next;
       });
     }
