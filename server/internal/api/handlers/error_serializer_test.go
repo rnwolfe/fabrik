@@ -197,7 +197,7 @@ func (s *alwaysErrBlockSvc) CreateBlock(_ int64, _, _ string, _ *int64, _ *int64
 }
 func (s *alwaysErrBlockSvc) GetBlock(_ int64) (*models.Block, error) { return nil, nil }
 func (s *alwaysErrBlockSvc) ListBlocks(_ int64) ([]*models.Block, error) { return nil, nil }
-func (s *alwaysErrBlockSvc) AssignAggregation(_ int64, _ models.NetworkPlane, _ int64, _ int) (*models.TierAggregationSummary, error) {
+func (s *alwaysErrBlockSvc) AssignAggregation(_ int64, _ models.NetworkPlane, _ int64, _ int, _ int) (*models.TierAggregationSummary, error) {
 	return nil, s.assignErr
 }
 func (s *alwaysErrBlockSvc) GetAggregationSummary(_ int64, _ models.NetworkPlane) (*models.TierAggregationSummary, error) {
@@ -207,7 +207,7 @@ func (s *alwaysErrBlockSvc) ListAggregationSummaries(_ int64) ([]*models.TierAgg
 	return nil, nil
 }
 func (s *alwaysErrBlockSvc) DeleteAggregation(_ int64, _ models.NetworkPlane) error { return nil }
-func (s *alwaysErrBlockSvc) AssignSuperBlockAggregation(_ int64, _ models.NetworkPlane, _ int64, _ int) (*models.TierAggregationSummary, error) {
+func (s *alwaysErrBlockSvc) AssignSuperBlockAggregation(_ int64, _ models.NetworkPlane, _ int64, _ int, _ int) (*models.TierAggregationSummary, error) {
 	return nil, nil
 }
 func (s *alwaysErrBlockSvc) GetSuperBlockAggregationSummary(_ int64, _ models.NetworkPlane) (*models.TierAggregationSummary, error) {

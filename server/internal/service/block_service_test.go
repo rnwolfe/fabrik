@@ -452,6 +452,41 @@ func TestBlockService_CreateBlockWithLeafModel(t *testing.T) {
 	})
 }
 
+func TestBlockService_CreateBlock_MultiULeafPlacement(t *testing.T) {
+	repo := newFakeBlockRepo()
+	svc := service.NewBlockService(repo)
+
+	// 2RU leaf model — height_u = 2.
+	leafModel := repo.addDeviceModel(48)
+	leafModel.HeightU = 2
+	repo.deviceModels[leafModel.ID] = leafModel
+	leafID := leafModel.ID
+
+	result, err := svc.CreateBlock(1, "multi-u-block", "", &leafID, nil, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	const rackHeight = 42
+	for _, rack := range result.Racks {
+		devices, _ := repo.ListDevicesInRack(rack.ID)
+		for _, d := range devices {
+			if d.Role != models.DeviceRoleLeaf {
+				continue
+			}
+			dm := repo.deviceModels[d.DeviceModelID]
+			topSlot := d.Position + dm.HeightU - 1
+			if topSlot > rackHeight {
+				t.Errorf("rack %d: leaf %q at position %d height %dU has top slot %d > rack height %d",
+					rack.ID, d.Name, d.Position, dm.HeightU, topSlot, rackHeight)
+			}
+			if d.Position < 1 {
+				t.Errorf("rack %d: leaf %q has invalid position %d", rack.ID, d.Name, d.Position)
+			}
+		}
+	}
+}
+
 func TestBlockService_AssignAggregation(t *testing.T) {
 	repo := newFakeBlockRepo()
 	svc := service.NewBlockService(repo)
@@ -463,7 +498,7 @@ func TestBlockService_AssignAggregation(t *testing.T) {
 	dm32 := repo.addDeviceModel(32)
 
 	t.Run("assign to block", func(t *testing.T) {
-		summary, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID, 2)
+		summary, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID, 2, 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -482,7 +517,7 @@ func TestBlockService_AssignAggregation(t *testing.T) {
 	})
 
 	t.Run("block not found", func(t *testing.T) {
-		_, err := svc.AssignAggregation(9999, models.NetworkPlaneFrontEnd, dm32.ID, 0)
+		_, err := svc.AssignAggregation(9999, models.NetworkPlaneFrontEnd, dm32.ID, 0, 0)
 		if !errors.Is(err, models.ErrNotFound) {
 			t.Errorf("expected ErrNotFound, got %v", err)
 		}
@@ -493,7 +528,7 @@ func TestBlockService_AssignAggregation(t *testing.T) {
 		repo.AllocatePorts(agg.ID, 99, []string{"leaf-1", "leaf-2", "leaf-3"}, 0)
 
 		dm2 := repo.addDeviceModel(2)
-		_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm2.ID, 0)
+		_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm2.ID, 0, 0)
 		if !errors.Is(err, models.ErrAggModelDownsize) {
 			t.Errorf("expected ErrAggModelDownsize, got %v", err)
 		}
@@ -783,7 +818,7 @@ func TestBlockService_AggregationDownsizeRejected(t *testing.T) {
 	block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "row-A"})
 	dm32 := repo.addDeviceModel(32)
 
-	_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID, 0)
+	_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm32.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("initial assign: %v", err)
 	}
@@ -792,13 +827,13 @@ func TestBlockService_AggregationDownsizeRejected(t *testing.T) {
 	repo.AllocatePorts(agg.ID, 100, make([]string, 10), 0)
 
 	dm8 := repo.addDeviceModel(8)
-	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm8.ID, 0)
+	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm8.ID, 0, 0)
 	if !errors.Is(err, models.ErrAggModelDownsize) {
 		t.Errorf("expected ErrAggModelDownsize, got %v", err)
 	}
 
 	dm12 := repo.addDeviceModel(12)
-	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm12.ID, 0)
+	_, err = svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm12.ID, 0, 0)
 	if err != nil {
 		t.Errorf("expected success resizing to 12, got %v", err)
 	}

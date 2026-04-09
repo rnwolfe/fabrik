@@ -16,6 +16,8 @@ type MetricsRepository interface {
 	QueryDesignCapacity(designID int64) (*models.CapacitySummary, error)
 	// QueryDesignPowerAndRacks returns total draw and total rack capacity for the design.
 	QueryDesignPowerAndRacks(designID int64) (totalDrawW int, totalRackCapacityW int, err error)
+	// QueryDesignDeviceCounts returns the count of placed server and switch devices.
+	QueryDesignDeviceCounts(designID int64) (serverCount int, switchCount int, err error)
 }
 
 // metricsDeriveFabric is the subset of DeriveFabricService used by MetricsService.
@@ -47,10 +49,16 @@ func (s *MetricsService) GetDesignMetrics(designID int64) (*models.DesignMetrics
 	}
 
 	// Compute fabric-level metrics from derived topology.
-	fabricEntries, portEntries, totalSwitches, totalHostPorts, bisectionBW := computeFabricMetrics(df)
+	fabricEntries, portEntries, _, _, bisectionBW := computeFabricMetrics(df)
 
 	// Identify choke point.
 	chokePoint := findChokePoint(fabricEntries)
+
+	// Count actual placed devices for accurate host/switch totals.
+	serverCount, switchCount, err := s.repo.QueryDesignDeviceCounts(designID)
+	if err != nil {
+		return nil, fmt.Errorf("query device counts for design %d: %w", designID, err)
+	}
 
 	// Compute power metrics.
 	power, err := s.computePowerMetrics(designID)
@@ -66,8 +74,8 @@ func (s *MetricsService) GetDesignMetrics(designID int64) (*models.DesignMetrics
 
 	m := &models.DesignMetrics{
 		DesignID:               designID,
-		TotalHosts:             totalHostPorts,
-		TotalSwitches:          totalSwitches,
+		TotalHosts:             serverCount,
+		TotalSwitches:          switchCount,
 		BisectionBandwidthGbps: bisectionBW,
 		Fabrics:                fabricEntries,
 		ChokePoint:             chokePoint,
@@ -102,13 +110,19 @@ func computeFabricMetrics(df *DerivedFabric) (
 	fabricName := "Derived Fabric"
 
 	leafSpineOversub := 0.0
-	if topo.LeafUplinks > 0 {
+	if topo.BandwidthOversubscription > 0 {
+		leafSpineOversub = topo.BandwidthOversubscription
+	} else if topo.LeafUplinks > 0 {
 		leafSpineOversub = float64(topo.LeafDownlinks) / float64(topo.LeafUplinks)
 	}
 
 	spineSuperSpineOversub := 0.0
 	if topo.Stages >= 3 && topo.SpineCount > 0 {
-		spineUplinks := topo.Radix - topo.LeafCount
+		spineRadix := topo.SpineRadix
+		if spineRadix <= 0 {
+			spineRadix = topo.Radix // fallback when spine radix unknown
+		}
+		spineUplinks := spineRadix - topo.LeafCount
 		spineDownlinks := topo.LeafCount
 		if spineUplinks > 0 {
 			spineSuperSpineOversub = float64(spineDownlinks) / float64(spineUplinks)
@@ -142,7 +156,11 @@ func computeFabricMetrics(df *DerivedFabric) (
 	})
 
 	if topo.Stages >= 2 {
-		spineTotal := topo.SpineCount * topo.Radix
+		spineRadix := topo.SpineRadix
+		if spineRadix <= 0 {
+			spineRadix = topo.Radix
+		}
+		spineTotal := topo.SpineCount * spineRadix
 		spinePortsPerSwitch := topo.LeafCount + topo.SuperSpineCount
 		spineAllocated := topo.SpineCount * spinePortsPerSwitch
 		portEntries = append(portEntries, models.PortUtilizationEntry{
@@ -156,7 +174,11 @@ func computeFabricMetrics(df *DerivedFabric) (
 	}
 
 	if topo.Stages >= 3 && topo.SuperSpineCount > 0 {
-		ssTotal := topo.SuperSpineCount * topo.Radix
+		ssRadix := topo.SpineRadix // super-spine radix defaults to spine radix
+		if ssRadix <= 0 {
+			ssRadix = topo.Radix
+		}
+		ssTotal := topo.SuperSpineCount * ssRadix
 		ssAllocated := topo.SuperSpineCount * topo.SpineCount
 		portEntries = append(portEntries, models.PortUtilizationEntry{
 			FabricID:       fabricID,
@@ -168,8 +190,10 @@ func computeFabricMetrics(df *DerivedFabric) (
 		})
 	}
 
-	// TODO: compute bisectionBW once port speed is available in the device model.
-	// For a 2-stage Clos: bisectionBW = spineCount * leafUplinks * portSpeedGbps.
+	// Bisection bandwidth from speed overlay (set in deriveTopology).
+	if topo.BisectionBandwidthGbps > 0 {
+		bisectionBW = topo.BisectionBandwidthGbps
+	}
 
 	return entries, portEntries, totalSwitches, totalHostPorts, bisectionBW
 }

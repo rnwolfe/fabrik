@@ -16,10 +16,11 @@ export const blocksApi = {
   delete: (id: number) => api.delete(`/blocks/${id}`),
 
   // Aggregation (spine/leaf model assignment per plane)
-  assignAggregation: (blockId: number, plane: string, deviceModelId: number, spineCount?: number) =>
+  assignAggregation: (blockId: number, plane: string, deviceModelId: number, spineCount?: number, hostLinkSpeedGbps?: number) =>
     api.put<TierAggregationSummary>(`/blocks/${blockId}/aggregations/${plane}`, {
       device_model_id: deviceModelId,
       spine_count: spineCount,
+      host_link_speed_gbps: hostLinkSpeedGbps ?? 0,
     }),
   getAggregation: (blockId: number, plane: string) =>
     api.get<TierAggregationSummary>(`/blocks/${blockId}/aggregations/${plane}`),
@@ -50,10 +51,11 @@ export const scaffoldApi = {
 };
 
 export const superBlocksApi = {
-  assignAggregation: (superBlockId: number, plane: string, deviceModelId: number, spineCount: number) =>
+  assignAggregation: (superBlockId: number, plane: string, deviceModelId: number, spineCount: number, hostLinkSpeedGbps?: number) =>
     api.put<TierAggregationSummary>(`/super-blocks/${superBlockId}/aggregations/${plane}`, {
       device_model_id: deviceModelId,
       spine_count: spineCount,
+      host_link_speed_gbps: hostLinkSpeedGbps ?? 0,
     }),
   getAggregation: (superBlockId: number, plane: string) =>
     api.get<TierAggregationSummary>(`/super-blocks/${superBlockId}/aggregations/${plane}`),

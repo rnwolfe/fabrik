@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
 )
@@ -96,10 +97,10 @@ func (s *DeriveFabricStore) ListBlocksBySuperBlock(superBlockID int64) ([]*model
 func (s *DeriveFabricStore) GetAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) (*models.TierAggregation, error) {
 	a := &models.TierAggregation{}
 	err := s.db.QueryRow(
-		`SELECT id, scope_type, scope_id, plane, device_model_id, spine_count, created_at, updated_at
+		`SELECT id, scope_type, scope_id, plane, device_model_id, spine_count, host_link_speed_gbps, created_at, updated_at
 		 FROM tier_aggregations WHERE scope_type = ? AND scope_id = ? AND plane = ?`,
 		scopeType, scopeID, plane,
-	).Scan(&a.ID, &a.ScopeType, &a.ScopeID, &a.Plane, &a.DeviceModelID, &a.SpineCount, &a.CreatedAt, &a.UpdatedAt)
+	).Scan(&a.ID, &a.ScopeType, &a.ScopeID, &a.Plane, &a.DeviceModelID, &a.SpineCount, &a.HostLinkSpeedGbps, &a.CreatedAt, &a.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}
@@ -113,7 +114,7 @@ func (s *DeriveFabricStore) CountAllocatedPorts(aggID int64) (int, error) {
 	return n, err
 }
 
-// GetDeviceModel returns a device model by ID.
+// GetDeviceModel returns a device model by ID, including its port groups.
 func (s *DeriveFabricStore) GetDeviceModel(id int64) (*models.DeviceModel, error) {
 	dm := &models.DeviceModel{}
 	err := s.db.QueryRow(
@@ -131,5 +132,30 @@ func (s *DeriveFabricStore) GetDeviceModel(id int64) (*models.DeviceModel, error
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Load port groups so callers (e.g., bandwidth overlay) have speed info.
+	rows, err := s.db.Query(
+		`SELECT id, device_model_id, count, speed_gbps, label, created_at
+		 FROM device_model_port_groups WHERE device_model_id = ?
+		 ORDER BY speed_gbps, count`, id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load port groups for model %d: %w", id, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pg models.PortGroup
+		if err := rows.Scan(&pg.ID, &pg.DeviceModelID, &pg.Count, &pg.SpeedGbps, &pg.Label, &pg.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan port group: %w", err)
+		}
+		dm.PortGroups = append(dm.PortGroups, pg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate port groups: %w", err)
+	}
+
 	return dm, err
 }

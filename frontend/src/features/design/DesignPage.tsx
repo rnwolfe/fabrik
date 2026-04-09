@@ -34,6 +34,7 @@ import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
 import RackElevation from './RackElevation';
 import HierarchyTree from './HierarchyTree';
+import MetricsStrip from './MetricsStrip';
 import type { Block, BlockAggregationSummary, RackSummary, DeviceModel, DesignHierarchy } from '@/models';
 
 // ─── New Block form schema ───────────────────────────────────────────────────
@@ -80,6 +81,8 @@ export default function DesignPage() {
   const [blockSpineCount, setBlockSpineCount] = useState<Map<number, number>>(new Map());
   // Per-block spine model (local state — not yet persisted in backend)
   const [blockSpineModel, setBlockSpineModel] = useState<Map<number, number>>(new Map());
+  // Per-block host link speed in Gbps (0 = use port group default)
+  const [blockHostLinkSpeed, setBlockHostLinkSpeed] = useState<Map<number, number>>(new Map());
 
   // ── Data queries ─────────────────────────────────────────────────────────
 
@@ -189,7 +192,11 @@ export default function DesignPage() {
       if (prev.has(blockId)) return prev;
       return new Map(prev).set(blockId, superBlockSpineAgg.spine_count);
     });
-  }, [selectedBlock, superBlockSpineAgg, setBlockSpineModel, setBlockSpineCount]);
+    setBlockHostLinkSpeed((prev) => {
+      if (prev.has(blockId)) return prev;
+      return new Map(prev).set(blockId, superBlockSpineAgg.host_link_speed_gbps ?? 0);
+    });
+  }, [selectedBlock, superBlockSpineAgg, setBlockSpineModel, setBlockSpineCount, setBlockHostLinkSpeed]);
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -239,10 +246,23 @@ export default function DesignPage() {
   });
 
   const saveSpineAggMutation = useMutation({
-    mutationFn: ({ superBlockId, plane, deviceModelId, spineCount }: { superBlockId: number; plane: string; deviceModelId: number; spineCount: number }) =>
-      superBlocksApi.assignAggregation(superBlockId, plane, deviceModelId, spineCount),
+    mutationFn: async ({ superBlockId, plane, deviceModelId, spineCount, hostLinkSpeedGbps }: { superBlockId: number; plane: string; deviceModelId: number; spineCount: number; hostLinkSpeedGbps?: number }) => {
+      const result = await superBlocksApi.assignAggregation(superBlockId, plane, deviceModelId, spineCount, hostLinkSpeedGbps);
+
+      const childBlocks = (blocks ?? []).filter((block) => block.super_block_id === superBlockId);
+      if (childBlocks.length > 0) {
+        await Promise.all(
+          childBlocks.map((block) =>
+            blocksApi.assignAggregation(block.id, plane, deviceModelId, spineCount, hostLinkSpeedGbps)
+          )
+        );
+      }
+
+      return result;
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['super-block-agg', variables.superBlockId, variables.plane] });
+      queryClient.invalidateQueries({ queryKey: ['aggs'] });
     },
   });
 
@@ -251,17 +271,24 @@ export default function DesignPage() {
       blocksApi.placeSpineDevices(blockId, deviceModelId, count),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['rack'] });
     },
   });
 
   const deleteBlockMutation = useMutation({
-    mutationFn: (blockId: number) => blocksApi.delete(blockId),
-    onSuccess: () => {
+    mutationFn: (block: Block) => blocksApi.delete(block.id),
+    onSuccess: (_data, block) => {
       queryClient.invalidateQueries({ queryKey: ['blocks'] });
       queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['rack'] });
       queryClient.invalidateQueries({ queryKey: ['aggs'] });
+      queryClient.invalidateQueries({ queryKey: ['super-block-agg', block.super_block_id] });
       setSelectedBlockId(null);
       setSelectedRackId(null);
+      // Clear stale per-block spine state so a new block starts fresh.
+      setBlockSpineModel((prev) => { const m = new Map(prev); m.delete(block.id); return m; });
+      setBlockSpineCount((prev) => { const m = new Map(prev); m.delete(block.id); return m; });
+      setBlockHostLinkSpeed((prev) => { const m = new Map(prev); m.delete(block.id); return m; });
     },
   });
 
@@ -316,6 +343,7 @@ export default function DesignPage() {
       // Use the count BlockDetailPanel computed as the default (port-group aware).
       // Avoids persisting 0 when the user hasn't touched the stepper yet.
       const count = blockSpineCount.get(blockId) ?? initialSpineCount;
+      const hostSpeed = blockHostLinkSpeed.get(blockId) ?? 0;
       setBlockSpineModel((prev) => new Map(prev).set(blockId, deviceModelId));
       setBlockSpineCount((prev) => prev.has(blockId) ? prev : new Map(prev).set(blockId, count));
       if (!selectedBlock) return;
@@ -324,10 +352,11 @@ export default function DesignPage() {
         plane: 'front_end',
         deviceModelId,
         spineCount: count,
+        hostLinkSpeedGbps: hostSpeed,
       });
       placeSpineDevicesMutation.mutate({ blockId, deviceModelId, count });
     },
-    [selectedBlock, blockSpineCount, saveSpineAggMutation, placeSpineDevicesMutation]
+    [selectedBlock, blockSpineCount, blockHostLinkSpeed, saveSpineAggMutation, placeSpineDevicesMutation]
   );
 
   const spineCountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -337,6 +366,7 @@ export default function DesignPage() {
     if (!selectedBlock) return;
     const effectiveSpineModelId = blockSpineModel.get(blockId);
     if (!effectiveSpineModelId) return;
+    const hostSpeed = blockHostLinkSpeed.get(blockId) ?? 0;
 
     // Debounce the save — rapid +/- clicks only fire one request
     if (spineCountTimerRef.current) clearTimeout(spineCountTimerRef.current);
@@ -346,6 +376,7 @@ export default function DesignPage() {
         plane: 'front_end',
         deviceModelId: effectiveSpineModelId,
         spineCount: value,
+        hostLinkSpeedGbps: hostSpeed,
       });
       placeSpineDevicesMutation.mutate({
         blockId,
@@ -353,7 +384,28 @@ export default function DesignPage() {
         count: value,
       });
     }, 400);
-  }, [selectedBlock, blockSpineModel, saveSpineAggMutation, placeSpineDevicesMutation]);
+  }, [selectedBlock, blockSpineModel, blockHostLinkSpeed, saveSpineAggMutation, placeSpineDevicesMutation]);
+
+  const hostLinkSpeedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleHostLinkSpeedChange = useCallback((blockId: number, value: number) => {
+    setBlockHostLinkSpeed((prev) => new Map(prev).set(blockId, value));
+    if (!selectedBlock) return;
+    const effectiveSpineModelId = blockSpineModel.get(blockId);
+    if (!effectiveSpineModelId) return;
+    const count = blockSpineCount.get(blockId) ?? 0;
+
+    if (hostLinkSpeedTimerRef.current) clearTimeout(hostLinkSpeedTimerRef.current);
+    hostLinkSpeedTimerRef.current = setTimeout(() => {
+      saveSpineAggMutation.mutate({
+        superBlockId: selectedBlock.super_block_id,
+        plane: 'front_end',
+        deviceModelId: effectiveSpineModelId,
+        spineCount: count,
+        hostLinkSpeedGbps: value,
+      });
+    }, 400);
+  }, [selectedBlock, blockSpineModel, blockSpineCount, saveSpineAggMutation]);
 
   // ── No design selected ─────────────────────────────────────────────────
 
@@ -426,6 +478,9 @@ export default function DesignPage() {
           </Button>
         </div>
       </div>
+
+      {/* Metrics strip */}
+      <MetricsStrip designId={activeDesignId} />
 
       {/* Two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -514,7 +569,9 @@ export default function DesignPage() {
               networkDevices={networkDevices}
               spineModelId={blockSpineModel.get(selectedBlock.id)}
               spineCount={blockSpineCount.get(selectedBlock.id) ?? null}
+              hostLinkSpeedGbps={blockHostLinkSpeed.get(selectedBlock.id) ?? 0}
               onSpineCountChange={(v) => handleSpineCountChange(selectedBlock.id, v)}
+              onHostLinkSpeedChange={(v) => handleHostLinkSpeedChange(selectedBlock.id, v)}
               onAssignSpine={(id, initialCount) => handleAssignSpine(selectedBlock.id, id, initialCount)}
             />
           ) : (
@@ -556,7 +613,7 @@ export default function DesignPage() {
               disabled={deleteBlockMutation.isPending}
               onClick={() => {
                 if (!blockToDelete) return;
-                deleteBlockMutation.mutate(blockToDelete.id, {
+                deleteBlockMutation.mutate(blockToDelete, {
                   onSuccess: () => setBlockToDelete(null),
                 });
               }}
@@ -671,7 +728,6 @@ function NewBlockDialogInner({
               devices={networkDevices}
               onSelect={onSelectLeaf}
               placeholder="Select leaf model…"
-              role="leaf"
             />
             <p className="text-[11px] text-muted-foreground">
               The leaf switch model determines port allocation and oversubscription.
