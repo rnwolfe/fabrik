@@ -262,7 +262,7 @@ func (s *BlockService) AssignLeafModel(blockID int64, leafModelID int64) (*model
 	} else if !errors.Is(err, models.ErrNotFound) {
 		return nil, fmt.Errorf("get aggregation for block %d: %w", blockID, err)
 	}
-	return s.AssignAggregation(blockID, models.NetworkPlaneFrontEnd, leafModelID, spineCount)
+	return s.AssignAggregation(blockID, models.NetworkPlaneFrontEnd, leafModelID, spineCount, 0)
 }
 
 // GetBlock returns the block with the given id.

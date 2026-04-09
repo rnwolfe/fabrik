@@ -1004,7 +1004,7 @@ func TestBlockService_AssignLeafModel(t *testing.T) {
 		dm2 := repo.addDeviceModel(64)
 
 		// Initial assignment with spine_count = 4.
-		_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm1.ID, 4)
+		_, err := svc.AssignAggregation(block.ID, models.NetworkPlaneFrontEnd, dm1.ID, 4, 0)
 		if err != nil {
 			t.Fatalf("initial assign: %v", err)
 		}
