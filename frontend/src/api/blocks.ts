@@ -13,7 +13,7 @@ export const blocksApi = {
     spine_count?: number;
   }) => api.post<CreateBlockResult>('/blocks', data),
   get: (id: number) => api.get<Block>(`/blocks/${id}`),
-  update: (id: number, data: { leaf_model_id?: number }) =>
+  update: (id: number, data: { leaf_model_id: number }) =>
     api.patch<TierAggregationSummary>(`/blocks/${id}`, data),
   delete: (id: number) => api.delete(`/blocks/${id}`),
 

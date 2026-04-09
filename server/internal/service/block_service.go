@@ -254,8 +254,11 @@ func (s *BlockService) AssignLeafModel(blockID int64, leafModelID int64) (*model
 	}
 	// Preserve existing spine_count if an agg already exists.
 	spineCount := 0
-	if existing, err := s.repo.GetAggregation(models.ScopeBlock, blockID, models.PlaneFrontEnd); err == nil {
+	existing, err := s.repo.GetAggregation(models.ScopeBlock, blockID, models.PlaneFrontEnd)
+	if err == nil {
 		spineCount = existing.SpineCount
+	} else if !errors.Is(err, models.ErrNotFound) {
+		return nil, fmt.Errorf("get aggregation for block %d: %w", blockID, err)
 	}
 	return s.AssignAggregation(blockID, models.NetworkPlaneFrontEnd, leafModelID, spineCount)
 }

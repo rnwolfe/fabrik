@@ -252,8 +252,7 @@ export default function DesignPage() {
   const assignLeafMutation = useMutation({
     mutationFn: ({ blockId, leafModelId }: { blockId: number; leafModelId: number }) =>
       blocksApi.update(blockId, { leaf_model_id: leafModelId }),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['aggs', variables.blockId] });
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['aggs'] });
       queryClient.invalidateQueries({ queryKey: ['racks'] });
     },
