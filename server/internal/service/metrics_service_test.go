@@ -16,6 +16,9 @@ type fakeMetricsRepo struct {
 	totalDrawW     int
 	totalCapacityW int
 	powerErr       error
+	serverCount    int
+	switchCount    int
+	deviceCountErr error
 }
 
 func (r *fakeMetricsRepo) GetDesignName(_ int64) (string, error) {
@@ -35,6 +38,10 @@ func (r *fakeMetricsRepo) QueryDesignCapacity(_ int64) (*models.CapacitySummary,
 
 func (r *fakeMetricsRepo) QueryDesignPowerAndRacks(_ int64) (int, int, error) {
 	return r.totalDrawW, r.totalCapacityW, r.powerErr
+}
+
+func (r *fakeMetricsRepo) QueryDesignDeviceCounts(_ int64) (int, int, error) {
+	return r.serverCount, r.switchCount, r.deviceCountErr
 }
 
 func newFakeMetricsRepo() *fakeMetricsRepo {

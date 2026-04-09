@@ -100,13 +100,14 @@ function RackConfig({
 }) {
   const queryClient = useQueryClient();
   const [serverModelId, setServerModelId] = useState<number | undefined>();
-  const [serverCount, setServerCount] = useState(1);
+  const [serverCount, setServerCount] = useState(0);
 
+  const existingServers = (rack.devices ?? []).filter((d) => d.role === 'server');
   const selectedServerModel = serverModels.find((d) => d.id === serverModelId);
   const maxServers = selectedServerModel
     ? Math.floor(
         (rack.available_u +
-          (rack.devices ?? []).filter((d) => d.role === 'server').reduce((s, d) => s + d.height_u, 0)) /
+          existingServers.reduce((s, d) => s + d.height_u, 0)) /
           selectedServerModel.height_u
       )
     : 0;
@@ -170,7 +171,11 @@ function RackConfig({
               value={serverModelId}
               onSelect={(id) => {
                 setServerModelId(id);
-                setServerCount(1);
+                const model = serverModels.find((d) => d.id === id);
+                const currentCount = model
+                  ? existingServers.filter((d) => d.device_model_id === id).length
+                  : 0;
+                setServerCount(currentCount || 1);
               }}
               placeholder="Select server model…"
               triggerClassName="h-8 text-xs"
@@ -220,7 +225,9 @@ function RackConfig({
             >
               {placeServersMutation.isPending
                 ? 'Placing…'
-                : `Place ${serverCount} Server${serverCount !== 1 ? 's' : ''}`}
+                : serverCount === 0
+                  ? 'Remove All Servers'
+                  : `Set to ${serverCount} Server${serverCount !== 1 ? 's' : ''}`}
             </Button>
           )}
 
@@ -241,6 +248,8 @@ function RackConfig({
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
+
+const PX_PER_U = 22; // explicit pixel height per rack unit — guarantees proportional rendering
 
 const MIN_VIZ_WIDTH = 140;
 const MAX_VIZ_WIDTH = 480;
@@ -323,8 +332,8 @@ export default function RackElevation({ rackId }: RackElevationProps) {
           </p>
         </div>
 
-        {/* Slot column — flex fills height, each slot gets proportional space */}
-        <div className="flex-1 flex flex-col min-h-0">
+        {/* Slot column — explicit pixel heights guarantee multi-U devices render proportionally */}
+        <div className="flex-1 overflow-y-auto min-h-0">
           {Array.from({ length: heightU }, (_, i) => heightU - i).map((u) => {
             const dev = devicesByTopSlot.get(u);
 
@@ -334,9 +343,9 @@ export default function RackElevation({ rackId }: RackElevationProps) {
               return (
                 <button
                   key={u}
-                  style={{ flexGrow: dev.height_u, flexShrink: dev.height_u, flexBasis: 0 }}
+                  style={{ height: dev.height_u * PX_PER_U }}
                   className={cn(
-                    'flex items-center px-1.5 gap-1 border-b border-border/40 font-mono text-[9px] font-medium w-full text-left transition-opacity',
+                    'flex items-center px-1.5 gap-1 border-b border-border/40 font-mono text-[9px] font-medium w-full text-left transition-opacity shrink-0',
                     colorClass,
                     isSelected ? 'ring-2 ring-inset ring-white/60' : 'hover:opacity-90'
                   )}
@@ -348,17 +357,17 @@ export default function RackElevation({ rackId }: RackElevationProps) {
               );
             }
 
-            // Check if covered by a multi-U device above
-            const coveredBy = Array.from(devicesByTopSlot.entries()).find(
+            // Check if this slot is covered by a multi-U device whose button is rendered above
+            const isCovered = Array.from(devicesByTopSlot.entries()).some(
               ([topSlot, d]) => topSlot > u && d.position <= u
             );
-            if (coveredBy) return null;
+            if (isCovered) return null;
 
             return (
               <div
                 key={u}
-                style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
-                className="flex items-center px-1.5 gap-1 border-b border-border/20"
+                style={{ height: PX_PER_U }}
+                className="flex items-center px-1.5 gap-1 border-b border-border/20 shrink-0"
               >
                 <span className="text-[8px] text-muted-foreground/30 font-mono w-3 text-right shrink-0">{u}</span>
                 <div className="flex-1 border-b border-dashed border-border/20" />
