@@ -73,7 +73,7 @@ func (h *BlockHandler) CreateBlock(w http.ResponseWriter, r *http.Request) {
 	result, err := h.svc.CreateBlock(req.SuperBlockID, req.Name, req.Description, req.LeafModelID, req.SpineModelID, req.SpineCount)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
 		slog.Error("create block", "err", err)
@@ -92,7 +92,7 @@ func (h *BlockHandler) GetBlock(w http.ResponseWriter, r *http.Request) {
 	b, err := h.svc.GetBlock(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "block not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("get block", "err", err, "blockID", id)
@@ -165,11 +165,11 @@ func (h *BlockHandler) AssignAggregation(w http.ResponseWriter, r *http.Request)
 	summary, err := h.svc.AssignAggregation(blockID, plane, req.DeviceModelID, req.SpineCount)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		if errors.Is(err, models.ErrAggModelDownsize) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
 		slog.Error("assign aggregation", "err", err, "blockID", blockID, "plane", plane)
@@ -194,7 +194,7 @@ func (h *BlockHandler) GetAggregation(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.svc.GetAggregationSummary(blockID, plane)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "aggregation not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("get aggregation", "err", err, "blockID", blockID, "plane", plane)
@@ -214,7 +214,7 @@ func (h *BlockHandler) ListAggregations(w http.ResponseWriter, r *http.Request) 
 	summaries, err := h.svc.ListAggregationSummaries(blockID)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "block not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("list aggregations", "err", err, "blockID", blockID)
@@ -241,7 +241,7 @@ func (h *BlockHandler) DeleteAggregation(w http.ResponseWriter, r *http.Request)
 
 	if err := h.svc.DeleteAggregation(blockID, plane); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "aggregation not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("delete aggregation", "err", err, "blockID", blockID, "plane", plane)
@@ -280,15 +280,15 @@ func (h *BlockHandler) AddRackToBlock(w http.ResponseWriter, r *http.Request) {
 	result, err := h.svc.AddRackToBlock(req.RackID, req.BlockID, req.SuperBlockID)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		if errors.Is(err, models.ErrAggPortsFull) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
 		slog.Error("add rack to block", "err", err, "rackID", req.RackID)
@@ -307,7 +307,7 @@ func (h *BlockHandler) RemoveRackFromBlock(w http.ResponseWriter, r *http.Reques
 
 	if err := h.svc.RemoveRackFromBlock(rackID); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("remove rack from block", "err", err, "rackID", rackID)
@@ -332,7 +332,7 @@ func (h *BlockHandler) ListPortConnections(w http.ResponseWriter, r *http.Reques
 	conns, err := h.svc.ListPortConnections(blockID, plane)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "aggregation not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("list port connections", "err", err, "blockID", blockID, "plane", plane)
@@ -372,7 +372,7 @@ func (h *BlockHandler) AssignSuperBlockAggregation(w http.ResponseWriter, r *htt
 	summary, err := h.svc.AssignSuperBlockAggregation(superBlockID, plane, req.DeviceModelID, req.SpineCount)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("assign super-block aggregation", "err", err, "superBlockID", superBlockID, "plane", plane)
@@ -397,7 +397,7 @@ func (h *BlockHandler) GetSuperBlockAggregation(w http.ResponseWriter, r *http.R
 	summary, err := h.svc.GetSuperBlockAggregationSummary(superBlockID, plane)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "aggregation not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("get super-block aggregation", "err", err, "superBlockID", superBlockID, "plane", plane)
@@ -439,7 +439,7 @@ func (h *BlockHandler) PlaceSpineDevices(w http.ResponseWriter, r *http.Request)
 
 	if err := h.svc.PlaceSpineDevices(blockID, req.DeviceModelID, req.Count); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("place spine devices", "err", err, "blockID", blockID)
@@ -457,7 +457,7 @@ func (h *BlockHandler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.svc.DeleteBlock(id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "block not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("delete block", "err", err, "blockID", id)
