@@ -22,6 +22,8 @@ export default defineConfig([
     rules: {
       // cva variants and hooks are intentionally exported alongside components
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // allow underscore-prefixed variables to be declared but unused (e.g. destructure-to-omit pattern)
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
     },
   },
 ])

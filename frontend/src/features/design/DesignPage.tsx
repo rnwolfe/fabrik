@@ -11,6 +11,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import DeviceModelPicker, { PickerGuardProvider, usePickerGuard } from '@/components/DeviceModelPicker';
 import { blocksApi, scaffoldApi, superBlocksApi } from '@/api/blocks';
 import { sitesApi } from '@/api/sites';
 import { racksApi } from '@/api/racks';
@@ -29,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import DeviceModelPicker, { PickerGuardProvider, usePickerGuard } from '@/components/DeviceModelPicker';
+
 import BlockCard from './BlockCard';
 import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
@@ -332,6 +333,15 @@ export default function DesignPage() {
     },
   });
 
+  const assignLeafMutation = useMutation({
+    mutationFn: ({ blockId, leafModelId }: { blockId: number; leafModelId: number }) =>
+      blocksApi.update(blockId, { leaf_model_id: leafModelId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['aggs'] });
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+    },
+  });
+
   // ── Forms ────────────────────────────────────────────────────────────────
 
   const {
@@ -377,6 +387,13 @@ export default function DesignPage() {
       role: data.role,
     });
   });
+
+  const handleAssignLeaf = useCallback(
+    (blockId: number, leafModelId: number) => {
+      assignLeafMutation.mutate({ blockId, leafModelId });
+    },
+    [assignLeafMutation]
+  );
 
   const handleAssignSpine = useCallback(
     (blockId: number, deviceModelId: number, initialSpineCount: number) => {
@@ -617,6 +634,7 @@ export default function DesignPage() {
               onSpineCountChange={(v) => handleSpineCountChange(selectedBlock.id, v)}
               onHostLinkSpeedChange={(v) => handleHostLinkSpeedChange(selectedBlock.id, v)}
               onAssignSpine={(id, initialCount) => handleAssignSpine(selectedBlock.id, id, initialCount)}
+              onAssignLeaf={(id) => handleAssignLeaf(selectedBlock.id, id)}
             />
           ) : (
             <DesignSummary

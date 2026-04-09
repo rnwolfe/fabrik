@@ -172,6 +172,28 @@ func (s *fakeBlockService) GetSuperBlockAggregationSummary(superBlockID int64, p
 	return &cp, nil
 }
 
+func (s *fakeBlockService) AssignLeafModel(blockID int64, leafModelID int64) (*models.TierAggregationSummary, error) {
+	if _, ok := s.blocks[blockID]; !ok {
+		return nil, models.ErrNotFound
+	}
+	// Sentinel: model ID 9999 = invalid model (constraint violation).
+	if leafModelID == 9999 {
+		return nil, fmt.Errorf("%w: leaf_model_id 9999 not found", models.ErrConstraintViolation)
+	}
+	summary := &models.TierAggregationSummary{
+		TierAggregation: models.TierAggregation{
+			ScopeType:     models.ScopeBlock,
+			ScopeID:       blockID,
+			Plane:         models.NetworkPlaneFrontEnd,
+			DeviceModelID: leafModelID,
+		},
+		TotalPorts:     48,
+		AvailablePorts: 48,
+	}
+	s.aggs[s.aggKey(blockID, models.NetworkPlaneFrontEnd)] = summary
+	return summary, nil
+}
+
 func (s *fakeBlockService) PlaceSpineDevices(blockID, spineModelID int64, count int) error {
 	if _, ok := s.blocks[blockID]; !ok {
 		return models.ErrNotFound
@@ -587,6 +609,102 @@ func TestBlockHandler_PlaceSpineDevices(t *testing.T) {
 	})
 }
 
+func TestBlockHandler_PatchBlock(t *testing.T) {
+	svc := newFakeBlockSvc()
+	h := handlers.NewBlockHandler(svc)
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
+
+	t.Run("assigns leaf model successfully", func(t *testing.T) {
+		body := map[string]any{"leaf_model_id": 10}
+		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var result models.TierAggregationSummary
+		json.NewDecoder(w.Body).Decode(&result)
+		if result.DeviceModelID != 10 {
+			t.Errorf("expected device_model_id 10, got %d", result.DeviceModelID)
+		}
+	})
+
+	t.Run("block not found (leaf_model_id) returns 404", func(t *testing.T) {
+		body := map[string]any{"leaf_model_id": 10}
+		r := blockRequest(t, "PATCH", "/api/blocks/9999", body)
+		r.SetPathValue("id", "9999")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("invalid leaf_model_id returns 422", func(t *testing.T) {
+		body := map[string]any{"leaf_model_id": 9999}
+		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusUnprocessableEntity {
+			t.Errorf("expected 422, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("reparent block via super_block_id", func(t *testing.T) {
+		body := map[string]any{"super_block_id": 2}
+		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var b models.Block
+		json.NewDecoder(w.Body).Decode(&b)
+		if b.SuperBlockID != 2 {
+			t.Errorf("expected super_block_id 2, got %d", b.SuperBlockID)
+		}
+	})
+
+	t.Run("block not found (super_block_id) returns 404", func(t *testing.T) {
+		body := map[string]any{"super_block_id": 2}
+		r := blockRequest(t, "PATCH", "/api/blocks/9999", body)
+		r.SetPathValue("id", "9999")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("missing any patchable field returns 400", func(t *testing.T) {
+		body := map[string]any{}
+		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("invalid json body returns 400", func(t *testing.T) {
+		r := httptest.NewRequest("PATCH", "/api/blocks/1", bytes.NewReader([]byte("not json")))
+		r.Header.Set("Content-Type", "application/json")
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("invalid block id returns 400", func(t *testing.T) {
+		body := map[string]any{"leaf_model_id": 10}
+		r := blockRequest(t, "PATCH", "/api/blocks/abc", body)
+		r.SetPathValue("id", "abc")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+}
+
 func TestBlockHandler_DeleteBlock(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
@@ -616,47 +734,6 @@ func TestBlockHandler_DeleteBlock(t *testing.T) {
 		w := blockResponse(t, http.HandlerFunc(h.DeleteBlock), r)
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("expected 400, got %d", w.Code)
-		}
-	})
-}
-
-func TestBlockHandler_PatchBlock(t *testing.T) {
-	svc := newFakeBlockSvc()
-	h := handlers.NewBlockHandler(svc)
-	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
-
-	t.Run("success - reparent block", func(t *testing.T) {
-		body := map[string]any{"super_block_id": 2}
-		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
-		r.SetPathValue("id", "1")
-		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
-		if w.Code != http.StatusOK {
-			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
-		}
-		var b models.Block
-		json.NewDecoder(w.Body).Decode(&b)
-		if b.SuperBlockID != 2 {
-			t.Errorf("expected super_block_id 2, got %d", b.SuperBlockID)
-		}
-	})
-
-	t.Run("missing super_block_id", func(t *testing.T) {
-		body := map[string]any{}
-		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
-		r.SetPathValue("id", "1")
-		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("expected 400, got %d", w.Code)
-		}
-	})
-
-	t.Run("block not found", func(t *testing.T) {
-		body := map[string]any{"super_block_id": 2}
-		r := blockRequest(t, "PATCH", "/api/blocks/9999", body)
-		r.SetPathValue("id", "9999")
-		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
-		if w.Code != http.StatusNotFound {
-			t.Errorf("expected 404, got %d", w.Code)
 		}
 	})
 }

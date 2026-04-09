@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import DeviceModelPicker from '@/components/DeviceModelPicker';
+import { HelpLink } from '@/components/HelpLink';
 import ClosDiagram from './ClosDiagram';
 import type {
   Block,
@@ -33,6 +34,7 @@ interface BlockDetailPanelProps {
   onSpineCountChange: (value: number) => void;
   onHostLinkSpeedChange: (value: number) => void;
   onAssignSpine: (deviceModelId: number, initialSpineCount: number) => void;
+  onAssignLeaf: (deviceModelId: number) => void;
 }
 
 /**
@@ -158,10 +160,12 @@ export default function BlockDetailPanel({
   onSpineCountChange,
   onHostLinkSpeedChange,
   onAssignSpine,
+  onAssignLeaf,
 }: BlockDetailPanelProps) {
   const frontendAgg = aggs.find((a) => a.plane === 'front_end');
-  const leafModel = frontendAgg
-    ? networkDevices.find((d) => d.id === frontendAgg.device_model_id)
+  const leafModelId = frontendAgg?.device_model_id;
+  const leafModel = leafModelId
+    ? networkDevices.find((d) => d.id === leafModelId)
     : undefined;
 
   const rackCount = racks.length;
@@ -198,6 +202,19 @@ export default function BlockDetailPanel({
         </Badge>
       </div>
 
+      {/* Leaf model selector */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Leaf Switch</Label>
+        <DeviceModelPicker
+          devices={networkDevices}
+          value={leafModelId}
+          onSelect={(id) => onAssignLeaf(id)}
+          placeholder="Select leaf model…"
+          triggerClassName="h-8 text-xs"
+          role="leaf"
+        />
+      </div>
+
       {/* Spine model selector */}
       <div className="space-y-1.5">
         <Label className="text-xs">Spine Switch</Label>
@@ -216,6 +233,7 @@ export default function BlockDetailPanel({
           <Label className="text-xs flex items-center gap-1">
             <Server className="size-3" />
             Spine Count
+            <HelpLink article="radix" anchor="radix-in-clos-fabrics" />
           </Label>
           <div className="flex items-center gap-2">
             <Button
@@ -275,6 +293,7 @@ export default function BlockDetailPanel({
           <Label className="text-xs flex items-center gap-1">
             <ArrowUpDown className="size-3" />
             Oversubscription
+            <HelpLink article="oversubscription" anchor="leaf-spine-ratio" />
           </Label>
           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
             <p className="text-sm font-semibold">{topology.oversubscription.toFixed(1)}:1</p>
@@ -320,11 +339,20 @@ export default function BlockDetailPanel({
         </div>
       )}
 
-      {!leafModel && !spineModel && (
+      {!leafModel && (
         <div className="rounded-lg border border-dashed border-border p-4 text-center">
           <p className="text-xs text-muted-foreground">
-            Assign a spine switch model to see the topology diagram and capacity metrics.
+            Assign a leaf switch model to enable topology metrics and the capacity diagram.
           </p>
+        </div>
+      )}
+
+      {leafModel && !spineModel && (
+        <div className="grid grid-cols-2 gap-2">
+          <Stat icon={Layers} label="Racks" value="—" />
+          <Stat icon={Server} label="Leaves" value="—" />
+          <Stat icon={Server} label="Spines" value="—" />
+          <Stat icon={Zap} label="Host Ports" value="—" />
         </div>
       )}
     </div>

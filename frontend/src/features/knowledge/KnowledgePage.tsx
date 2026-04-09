@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -11,7 +12,53 @@ import { EmptyState } from '@/components/EmptyState';
 import { Input } from '@/components/ui/input';
 import { BookOpen, Search, ChevronRight, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useScrollToHash } from '@/hooks/useScrollToHash';
 import type { KnowledgeArticle } from '@/models';
+
+/** Convert heading text to a URL-safe slug for anchor linking. */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/[\s_]+/g, '-');
+}
+
+/** Extract plain text from ReactMarkdown children for slug generation. */
+function extractText(children: React.ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(extractText).join('');
+  if (children !== null && typeof children === 'object') {
+    const el = children as React.ReactElement<{ children?: React.ReactNode }>;
+    if ('props' in el && el.props) {
+      return extractText(el.props.children);
+    }
+  }
+  return '';
+}
+
+/** Custom ReactMarkdown heading renderers that inject `id` attributes from slugified text. */
+const markdownComponents: Components = {
+  h1: ({ node: _node, children, ...props }) => (
+    <h1 id={slugify(extractText(children))} {...props}>{children}</h1>
+  ),
+  h2: ({ node: _node, children, ...props }) => (
+    <h2 id={slugify(extractText(children))} {...props}>{children}</h2>
+  ),
+  h3: ({ node: _node, children, ...props }) => (
+    <h3 id={slugify(extractText(children))} {...props}>{children}</h3>
+  ),
+  h4: ({ node: _node, children, ...props }) => (
+    <h4 id={slugify(extractText(children))} {...props}>{children}</h4>
+  ),
+  h5: ({ node: _node, children, ...props }) => (
+    <h5 id={slugify(extractText(children))} {...props}>{children}</h5>
+  ),
+  h6: ({ node: _node, children, ...props }) => (
+    <h6 id={slugify(extractText(children))} {...props}>{children}</h6>
+  ),
+};
 
 export default function KnowledgePage() {
   const { '*': articlePath } = useParams();
@@ -28,6 +75,9 @@ export default function KnowledgePage() {
     queryFn: () => knowledgeApi.article(articlePath!),
     enabled: !!articlePath,
   });
+
+  // Scroll to hash once the article content is mounted in the DOM
+  useScrollToHash(!!article && !articleLoading);
 
   const articles = index?.articles ?? [];
 
@@ -156,7 +206,11 @@ export default function KnowledgePage() {
               ))}
             </div>
             <article className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-code:before:content-none prose-code:after:content-none prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-sm prose-code:font-mono prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:text-foreground prose-table:text-sm prose-th:text-muted-foreground prose-img:rounded-lg">
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={markdownComponents}
+              >
                 {article.content ?? ''}
               </ReactMarkdown>
             </article>
