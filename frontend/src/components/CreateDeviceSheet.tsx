@@ -38,6 +38,7 @@ export default function CreateDeviceSheet({
   };
 
   const handleCancel = () => {
+    createMutation.reset();
     onOpenChange(false);
   };
 

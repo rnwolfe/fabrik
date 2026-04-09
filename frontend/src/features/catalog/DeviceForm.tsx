@@ -219,7 +219,7 @@ export default function DeviceForm({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => appendPortGroup({ count: 0, speed_gbps: 0, label: '' })}
+                onClick={() => appendPortGroup({ count: 1, speed_gbps: 1, label: '' })}
               >
                 <Plus className="size-3" />
                 Add Group

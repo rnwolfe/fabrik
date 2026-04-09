@@ -102,14 +102,16 @@ export default function DeviceModelPicker({
   );
 
   const handleCreateNew = useCallback(() => {
-    setOpen(false);
+    // Keep the picker open — the sheet opens on top. Closing happens only
+    // after a successful create (handleDeviceCreated) or when the user
+    // explicitly closes/cancels the sheet.
     setSheetOpen(true);
-  }, [setOpen]);
+  }, []);
 
   const handleDeviceCreated = useCallback(
     (newDevice: DeviceModel) => {
       setSheetOpen(false);
-      handleSelect(newDevice.id);
+      handleSelect(newDevice.id); // handleSelect already closes the picker
     },
     [handleSelect],
   );
