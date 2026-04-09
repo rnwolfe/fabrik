@@ -13,7 +13,6 @@ import {
   FolderOpen,
   ArrowRight,
   Database,
-  Trash2,
 } from 'lucide-react';
 import { designsApi } from '@/api/designs';
 import { useDesign } from '@/contexts/DesignContext';
@@ -21,7 +20,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -36,7 +35,6 @@ type CreateDesignForm = z.infer<typeof createDesignSchema>;
 
 export default function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Design | null>(null);
   const { setActiveDesignId, activeDesignId } = useDesign();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -53,15 +51,6 @@ export default function DashboardPage() {
       setActiveDesignId(design.id);
       setCreateOpen(false);
       reset();
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => designsApi.delete(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['designs'] });
-      if (activeDesignId === id) setActiveDesignId(null);
-      setDeleteTarget(null);
     },
   });
 
@@ -157,21 +146,10 @@ export default function DashboardPage() {
                     <Calendar className="size-3" />
                     {formatDate(design.created_at)}
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(design); }}
-                      title="Delete design"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                    <Button size="sm" onClick={() => handleOpenDesign(design)}>
-                      Open
-                      <ArrowRight className="size-3" />
-                    </Button>
-                  </div>
+                  <Button size="sm" onClick={() => handleOpenDesign(design)}>
+                    Open
+                    <ArrowRight className="size-3" />
+                  </Button>
                 </CardFooter>
               </Card>
             ))}
@@ -230,30 +208,6 @@ export default function DashboardPage() {
           </div>
         </section>
       )}
-
-      {/* Delete Confirmation */}
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Delete design?</DialogTitle>
-            <DialogDescription>
-              <strong>{deleteTarget?.name}</strong> and all its fabrics, blocks, racks, and devices will be permanently deleted. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />} disabled={deleteMutation.isPending}>
-              Cancel
-            </DialogClose>
-            <Button
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-            >
-              {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Create Design Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
