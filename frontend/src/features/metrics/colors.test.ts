@@ -4,6 +4,8 @@ import {
   oversubBgColor,
   utilizationColor,
   utilizationBgColor,
+  powerUtilizationColor,
+  powerUtilizationBgColor,
 } from './colors';
 
 describe('oversubColor', () => {
@@ -50,47 +52,92 @@ describe('oversubBgColor', () => {
   });
 });
 
-describe('utilizationColor', () => {
-  it('returns green for utilization <= 75%', () => {
+describe('utilizationColor (port utilization: >80 red, >60 amber)', () => {
+  it('returns green for utilization <= 60%', () => {
     expect(utilizationColor(0)).toContain('green');
     expect(utilizationColor(50)).toContain('green');
-    expect(utilizationColor(75)).toContain('green');
+    expect(utilizationColor(60)).toContain('green');
   });
 
-  it('returns amber for utilization > 75% and <= 90%', () => {
-    expect(utilizationColor(75.01)).toContain('amber');
+  it('returns amber for utilization > 60% and <= 80%', () => {
+    expect(utilizationColor(60.01)).toContain('amber');
+    expect(utilizationColor(70)).toContain('amber');
     expect(utilizationColor(80)).toContain('amber');
-    expect(utilizationColor(90)).toContain('amber');
   });
 
-  it('returns red for utilization > 90%', () => {
-    expect(utilizationColor(90.01)).toContain('red');
+  it('returns red for utilization > 80%', () => {
+    expect(utilizationColor(80.01)).toContain('red');
     expect(utilizationColor(100)).toContain('red');
   });
 
-  it('handles boundary at exactly 75', () => {
-    expect(utilizationColor(75)).toContain('green');
-    expect(utilizationColor(75.001)).toContain('amber');
+  it('handles boundary at exactly 60', () => {
+    expect(utilizationColor(60)).toContain('green');
+    expect(utilizationColor(60.001)).toContain('amber');
   });
 
-  it('handles boundary at exactly 90', () => {
-    expect(utilizationColor(90)).toContain('amber');
-    expect(utilizationColor(90.001)).toContain('red');
+  it('handles boundary at exactly 80', () => {
+    expect(utilizationColor(80)).toContain('amber');
+    expect(utilizationColor(80.001)).toContain('red');
   });
 });
 
-describe('utilizationBgColor', () => {
-  it('returns green background for pct <= 75', () => {
+describe('utilizationBgColor (port utilization: >80 red, >60 amber)', () => {
+  it('returns green background for pct <= 60', () => {
     expect(utilizationBgColor(50)).toBe('bg-green-500');
-    expect(utilizationBgColor(75)).toBe('bg-green-500');
+    expect(utilizationBgColor(60)).toBe('bg-green-500');
+  });
+
+  it('returns amber background for pct > 60 and <= 80', () => {
+    expect(utilizationBgColor(70)).toBe('bg-amber-500');
+    expect(utilizationBgColor(80)).toBe('bg-amber-500');
+  });
+
+  it('returns red background for pct > 80', () => {
+    expect(utilizationBgColor(95)).toBe('bg-red-500');
+  });
+});
+
+describe('powerUtilizationColor (power utilization: >90 red, >75 amber)', () => {
+  it('returns green for utilization <= 75%', () => {
+    expect(powerUtilizationColor(0)).toContain('green');
+    expect(powerUtilizationColor(50)).toContain('green');
+    expect(powerUtilizationColor(75)).toContain('green');
+  });
+
+  it('returns amber for utilization > 75% and <= 90%', () => {
+    expect(powerUtilizationColor(75.01)).toContain('amber');
+    expect(powerUtilizationColor(80)).toContain('amber');
+    expect(powerUtilizationColor(90)).toContain('amber');
+  });
+
+  it('returns red for utilization > 90%', () => {
+    expect(powerUtilizationColor(90.01)).toContain('red');
+    expect(powerUtilizationColor(100)).toContain('red');
+  });
+
+  it('handles boundary at exactly 75', () => {
+    expect(powerUtilizationColor(75)).toContain('green');
+    expect(powerUtilizationColor(75.001)).toContain('amber');
+  });
+
+  it('handles boundary at exactly 90', () => {
+    expect(powerUtilizationColor(90)).toContain('amber');
+    expect(powerUtilizationColor(90.001)).toContain('red');
+  });
+});
+
+describe('powerUtilizationBgColor (power utilization: >90 red, >75 amber)', () => {
+  it('returns green background for pct <= 75', () => {
+    expect(powerUtilizationBgColor(50)).toBe('bg-green-500');
+    expect(powerUtilizationBgColor(75)).toBe('bg-green-500');
   });
 
   it('returns amber background for pct > 75 and <= 90', () => {
-    expect(utilizationBgColor(80)).toBe('bg-amber-500');
-    expect(utilizationBgColor(90)).toBe('bg-amber-500');
+    expect(powerUtilizationBgColor(80)).toBe('bg-amber-500');
+    expect(powerUtilizationBgColor(90)).toBe('bg-amber-500');
   });
 
   it('returns red background for pct > 90', () => {
-    expect(utilizationBgColor(95)).toBe('bg-red-500');
+    expect(powerUtilizationBgColor(95)).toBe('bg-red-500');
   });
 });

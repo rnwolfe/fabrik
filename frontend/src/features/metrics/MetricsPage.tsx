@@ -32,7 +32,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { FabricTier } from '@/models';
-import { oversubColor, oversubBgColor } from './colors';
+import { oversubColor, utilizationBgColor, powerUtilizationColor, powerUtilizationBgColor } from './colors';
 
 export default function MetricsPage() {
   const { activeDesignId, setActiveDesignId } = useDesign();
@@ -125,13 +125,7 @@ export default function MetricsPage() {
               icon={Zap}
               label="Power Utilization"
               value={`${metrics.power.utilization_pct.toFixed(1)}%`}
-              valueClass={
-                metrics.power.utilization_pct > 90
-                  ? 'text-red-600 dark:text-red-400'
-                  : metrics.power.utilization_pct > 75
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : undefined
-              }
+              valueClass={powerUtilizationColor(metrics.power.utilization_pct)}
             />
           </div>
 
@@ -242,20 +236,14 @@ export default function MetricsPage() {
                   </div>
                   <div className="ml-auto">
                     <p className="text-xs text-muted-foreground">Utilization</p>
-                    <p className={`font-mono font-medium ${
-                      metrics.power.utilization_pct > 90 ? 'text-red-600 dark:text-red-400' :
-                      metrics.power.utilization_pct > 75 ? 'text-amber-600 dark:text-amber-400' : ''
-                    }`}>
+                    <p className={`font-mono font-medium ${powerUtilizationColor(metrics.power.utilization_pct)}`}>
                       {metrics.power.utilization_pct.toFixed(1)}%
                     </p>
                   </div>
                 </div>
                 <ProgressTrack className="h-2">
                   <ProgressIndicator
-                    className={
-                      metrics.power.utilization_pct > 90 ? 'bg-red-500' :
-                      metrics.power.utilization_pct > 75 ? 'bg-amber-500' : 'bg-green-500'
-                    }
+                    className={powerUtilizationBgColor(metrics.power.utilization_pct)}
                     style={{ width: `${Math.min(metrics.power.utilization_pct, 100)}%` }}
                   />
                 </ProgressTrack>
@@ -308,7 +296,7 @@ export default function MetricsPage() {
                             <div className="flex items-center gap-2">
                               <ProgressTrack className="h-1.5 flex-1">
                                 <ProgressIndicator
-                                  className={oversubBgColor(utilPct > 80 ? 5 : utilPct > 60 ? 3 : 1)}
+                                  className={utilizationBgColor(utilPct)}
                                   style={{ width: `${utilPct}%` }}
                                 />
                               </ProgressTrack>
