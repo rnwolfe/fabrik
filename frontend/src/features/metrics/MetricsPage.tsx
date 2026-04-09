@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { metricsApi } from '@/api/metrics';
 import { designsApi } from '@/api/designs';
 import { useDesign } from '@/contexts/DesignContext';
@@ -20,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
+import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
 import {
   BarChart3,
   AlertTriangle,
@@ -155,8 +156,14 @@ export default function MetricsPage() {
                   Choke Point Detected
                 </p>
                 <p className="mt-0.5 text-sm text-amber-600 dark:text-amber-400">
-                  <strong>{metrics.choke_point.fabric_name}</strong> (
-                  {tierLabel[metrics.choke_point.tier]}) has the worst oversubscription at{' '}
+                  <Link
+                    to="/design"
+                    className="font-semibold underline underline-offset-2 hover:text-amber-800 dark:hover:text-amber-200"
+                    title="Go to Design page to review this fabric"
+                  >
+                    {metrics.choke_point.fabric_name}
+                  </Link>{' '}
+                  ({tierLabel[metrics.choke_point.tier]}) has the worst oversubscription at{' '}
                   <strong>{metrics.choke_point.ratio.toFixed(2)}:1</strong>
                 </p>
               </div>
@@ -261,15 +268,16 @@ export default function MetricsPage() {
                     </p>
                   </div>
                 </div>
-                <ProgressTrack className="h-2">
-                  <ProgressIndicator
-                    className={
-                      metrics.power.utilization_pct > 90 ? 'bg-red-500' :
-                      metrics.power.utilization_pct > 75 ? 'bg-amber-500' : 'bg-green-500'
-                    }
-                    style={{ width: `${Math.min(metrics.power.utilization_pct, 100)}%` }}
-                  />
-                </ProgressTrack>
+                <Progress value={Math.min(metrics.power.utilization_pct, 100)}>
+                  <ProgressTrack className="h-2">
+                    <ProgressIndicator
+                      className={
+                        metrics.power.utilization_pct > 90 ? 'bg-red-500' :
+                        metrics.power.utilization_pct > 75 ? 'bg-amber-500' : 'bg-green-500'
+                      }
+                    />
+                  </ProgressTrack>
+                </Progress>
               </CardContent>
             </Card>
           </section>
@@ -317,12 +325,13 @@ export default function MetricsPage() {
                           <TableCell className="text-right font-mono text-sm">{p.total_ports.toLocaleString()}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <ProgressTrack className="h-1.5 flex-1">
-                                <ProgressIndicator
-                                  className={oversubBgColor(utilPct > 80 ? 5 : utilPct > 60 ? 3 : 1)}
-                                  style={{ width: `${utilPct}%` }}
-                                />
-                              </ProgressTrack>
+                              <Progress value={utilPct} className="flex-1">
+                                <ProgressTrack className="h-1.5 w-full">
+                                  <ProgressIndicator
+                                    className={oversubBgColor(utilPct > 80 ? 5 : utilPct > 60 ? 3 : 1)}
+                                  />
+                                </ProgressTrack>
+                              </Progress>
                               <span className="w-10 text-right text-xs text-muted-foreground">
                                 {utilPct.toFixed(0)}%
                               </span>
