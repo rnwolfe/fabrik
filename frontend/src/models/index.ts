@@ -313,6 +313,15 @@ export interface DeviceSummary {
   updated_at: string;
 }
 
+export type RackWarningKind = 'power' | 'ru' | 'port';
+
+export interface RackWarning {
+  kind: RackWarningKind;
+  detail: string;
+  delta_w?: number;
+  delta_u?: number;
+}
+
 export interface RackSummary {
   id: number;
   block_id?: number;
@@ -328,6 +337,8 @@ export interface RackSummary {
   used_watts_typical: number;
   used_watts_max: number;
   devices: DeviceSummary[];
+  warnings?: RackWarning[];
+  /** @deprecated use warnings instead */
   warning?: string;
   created_at: string;
   updated_at: string;

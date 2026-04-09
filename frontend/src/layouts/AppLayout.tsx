@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Server,
@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { ActiveDesignPill } from './ActiveDesignPill';
 
 interface NavItem {
   to: string;
@@ -92,6 +93,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+  const showPill = location.pathname !== '/';
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -122,12 +125,21 @@ export default function AppLayout() {
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-hidden">
         <div className="flex h-full flex-col overflow-y-auto">
-          {/* Mobile header spacer */}
-          <div className="flex h-12 shrink-0 items-center border-b border-border px-4 lg:hidden">
-            <div className="ml-10 flex items-center gap-2">
+          {/* Top header bar (mobile + pill) */}
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
+            {/* Mobile logo */}
+            <div className="ml-10 flex items-center gap-2 lg:hidden">
               <Network className="size-4 text-muted-foreground" />
               <span className="font-mono text-sm font-semibold">fabrik</span>
             </div>
+            {/* Desktop spacer so pill stays right-aligned */}
+            <div className="hidden lg:flex" />
+            {/* Active design pill — hidden on Dashboard */}
+            {showPill && (
+              <div className="flex items-center">
+                <ActiveDesignPill />
+              </div>
+            )}
           </div>
           <div className="flex-1 p-6">
             <Outlet />
