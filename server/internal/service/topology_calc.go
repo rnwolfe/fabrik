@@ -50,6 +50,13 @@ type TopologyPlan struct {
 	// Derived metrics.
 	TotalSwitches  int `json:"total_switches"`
 	TotalHostPorts int `json:"total_host_ports"`
+
+	// Bandwidth overlay — computed after topology when port speed info is available.
+	BandwidthOversubscription float64 `json:"bandwidth_oversubscription,omitempty"`
+	HostLinkSpeedGbps         int     `json:"host_link_speed_gbps,omitempty"`
+	UplinkSpeedGbps           int     `json:"uplink_speed_gbps,omitempty"`
+	DownlinkSpeedGbps         int     `json:"downlink_speed_gbps,omitempty"`
+	BisectionBandwidthGbps    float64 `json:"bisection_bandwidth_gbps,omitempty"`
 }
 
 // CalculateTopology computes the Clos topology for the given parameters.

@@ -18,13 +18,13 @@ type BlockService interface {
 	ListBlocks(superBlockID int64) ([]*models.Block, error)
 
 	// Aggregation operations (block-level)
-	AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error)
+	AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int, hostLinkSpeedGbps int) (*models.TierAggregationSummary, error)
 	GetAggregationSummary(blockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error)
 	ListAggregationSummaries(blockID int64) ([]*models.TierAggregationSummary, error)
 	DeleteAggregation(blockID int64, plane models.NetworkPlane) error
 
 	// Aggregation operations (super-block-level)
-	AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error)
+	AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int, hostLinkSpeedGbps int) (*models.TierAggregationSummary, error)
 	GetSuperBlockAggregationSummary(superBlockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error)
 
 	// Leaf model assignment (PATCH)
@@ -136,9 +136,10 @@ func (h *BlockHandler) ListBlocks(w http.ResponseWriter, r *http.Request) {
 // --- Aggregation handlers ---
 
 type assignAggregationRequest struct {
-	Plane         string `json:"plane"`
-	DeviceModelID int64  `json:"device_model_id"`
-	SpineCount    int    `json:"spine_count"`
+	Plane             string `json:"plane"`
+	DeviceModelID     int64  `json:"device_model_id"`
+	SpineCount        int    `json:"spine_count"`
+	HostLinkSpeedGbps int    `json:"host_link_speed_gbps"`
 }
 
 // AssignAggregation handles PUT /api/blocks/{id}/aggregations/{plane}.
@@ -165,7 +166,7 @@ func (h *BlockHandler) AssignAggregation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	summary, err := h.svc.AssignAggregation(blockID, plane, req.DeviceModelID, req.SpineCount)
+	summary, err := h.svc.AssignAggregation(blockID, plane, req.DeviceModelID, req.SpineCount, req.HostLinkSpeedGbps)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			writeDomainError(w, http.StatusNotFound, err)
@@ -372,7 +373,7 @@ func (h *BlockHandler) AssignSuperBlockAggregation(w http.ResponseWriter, r *htt
 		return
 	}
 
-	summary, err := h.svc.AssignSuperBlockAggregation(superBlockID, plane, req.DeviceModelID, req.SpineCount)
+	summary, err := h.svc.AssignSuperBlockAggregation(superBlockID, plane, req.DeviceModelID, req.SpineCount, req.HostLinkSpeedGbps)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
 			writeDomainError(w, http.StatusNotFound, err)

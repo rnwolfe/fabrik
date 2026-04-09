@@ -121,7 +121,9 @@ func (s *BlockService) CreateBlock(superBlockID int64, name, description string,
 		racks = append(racks, rack)
 
 		// Place 2 leaf devices at the top of the rack (top-down).
-		pos := defaultRackHeightU
+		// Start at the highest valid bottom-position for this leaf height so the
+		// device's top slot is flush with the rack ceiling.
+		pos := defaultRackHeightU - leafModel.HeightU + 1
 		for j := 0; j < leavesPerRack; j++ {
 			leafName := fmt.Sprintf("leaf-%d%c", i, 'a'+j)
 			_, err := s.repo.PlaceDevice(&models.Device{
@@ -179,7 +181,7 @@ func (s *BlockService) CreateBlock(superBlockID int64, name, description string,
 		racks = append(racks, rack)
 
 		// Place 2 leaf devices at the top of each compute rack.
-		pos := defaultRackHeightU
+		pos := defaultRackHeightU - leafModel.HeightU + 1
 		for j := 0; j < leavesPerRack; j++ {
 			leafName := fmt.Sprintf("leaf-%d%c", i+2, 'a'+j) // leaf-3a, leaf-3b, etc.
 			_, err := s.repo.PlaceDevice(&models.Device{
@@ -286,7 +288,7 @@ func (s *BlockService) ListBlocks(superBlockID int64) ([]*models.Block, error) {
 // AssignAggregation assigns an aggregation device model to a block for a given plane.
 // If the block already has an agg for this plane, it is replaced.
 // Replacing with a smaller model is rejected when existing connections would exceed new capacity.
-func (s *BlockService) AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error) {
+func (s *BlockService) AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int, hostLinkSpeedGbps int) (*models.TierAggregationSummary, error) {
 	if _, err := s.repo.GetBlock(blockID); err != nil {
 		return nil, fmt.Errorf("get block %d: %w", blockID, err)
 	}
@@ -311,17 +313,18 @@ func (s *BlockService) AssignAggregation(blockID int64, plane models.NetworkPlan
 	}
 
 	agg, err := s.repo.SetAggregation(&models.TierAggregation{
-		ScopeType:     models.ScopeBlock,
-		ScopeID:       blockID,
-		Plane:         plane,
-		DeviceModelID: deviceModelID,
-		SpineCount:    spineCount,
+		ScopeType:         models.ScopeBlock,
+		ScopeID:           blockID,
+		Plane:             plane,
+		DeviceModelID:     deviceModelID,
+		SpineCount:        spineCount,
+		HostLinkSpeedGbps: hostLinkSpeedGbps,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("set aggregation: %w", err)
 	}
 
-	slog.Info("aggregation assigned", "blockID", blockID, "plane", plane, "deviceModelID", deviceModelID, "spineCount", spineCount)
+	slog.Info("aggregation assigned", "blockID", blockID, "plane", plane, "deviceModelID", deviceModelID, "spineCount", spineCount, "hostLinkSpeedGbps", hostLinkSpeedGbps)
 	return s.buildAggSummary(agg, dm)
 }
 
@@ -362,24 +365,25 @@ func (s *BlockService) ListAggregationSummaries(blockID int64) ([]*models.TierAg
 
 // AssignSuperBlockAggregation assigns an aggregation device model to a super-block for a given plane.
 // If the super-block already has an agg for this plane, it is replaced.
-func (s *BlockService) AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error) {
+func (s *BlockService) AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int, hostLinkSpeedGbps int) (*models.TierAggregationSummary, error) {
 	dm, err := s.repo.GetDeviceModel(deviceModelID)
 	if err != nil {
 		return nil, fmt.Errorf("get device model %d: %w", deviceModelID, err)
 	}
 
 	agg, err := s.repo.SetAggregation(&models.TierAggregation{
-		ScopeType:     models.ScopeSuperBlock,
-		ScopeID:       superBlockID,
-		Plane:         plane,
-		DeviceModelID: deviceModelID,
-		SpineCount:    spineCount,
+		ScopeType:         models.ScopeSuperBlock,
+		ScopeID:           superBlockID,
+		Plane:             plane,
+		DeviceModelID:     deviceModelID,
+		SpineCount:        spineCount,
+		HostLinkSpeedGbps: hostLinkSpeedGbps,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("set super-block aggregation: %w", err)
 	}
 
-	slog.Info("super-block aggregation assigned", "superBlockID", superBlockID, "plane", plane, "deviceModelID", deviceModelID, "spineCount", spineCount)
+	slog.Info("super-block aggregation assigned", "superBlockID", superBlockID, "plane", plane, "deviceModelID", deviceModelID, "spineCount", spineCount, "hostLinkSpeedGbps", hostLinkSpeedGbps)
 	return s.buildAggSummary(agg, dm)
 }
 
@@ -444,7 +448,7 @@ func (s *BlockService) AddRackToBlock(rackID int64, blockID *int64, superBlockID
 					if modelErr == nil {
 						// Count existing racks to derive rack number for naming.
 						rackNum := 1
-						pos := rack.HeightU // top of rack
+						pos := rack.HeightU - leafModel.HeightU + 1 // highest valid bottom-position
 						for j := 0; j < 2; j++ {
 							leafName := fmt.Sprintf("leaf-%d%c", rackNum, 'a'+j)
 							s.repo.PlaceDevice(&models.Device{
@@ -641,13 +645,27 @@ func (s *BlockService) PlaceSpineDevices(blockID, spineModelID int64, count int)
 		}
 	}
 
+	// Sync spine count into the block's front_end aggregation so that DeriveFabric
+	// can calculate topology metrics. If no aggregation exists yet, skip silently —
+	// the block was created without a leaf model assignment and topology can't be
+	// derived regardless.
+	if agg, err := s.repo.GetAggregation(models.ScopeBlock, blockID, models.PlaneFrontEnd); err == nil {
+		agg.SpineCount = count
+		if _, err := s.repo.SetAggregation(agg); err != nil {
+			slog.Warn("failed to sync spine count into aggregation", "blockID", blockID, "err", err)
+		}
+	}
+
 	slog.Info("spine devices placed", "blockID", blockID, "spineModelID", spineModelID, "count", count)
 	return nil
 }
 
 // DeleteBlock removes a block and all its racks, devices, and aggregations.
+// If this is the last block in its super-block, the super-block's aggregations
+// are also removed so stale spine configuration doesn't bleed into new blocks.
 func (s *BlockService) DeleteBlock(id int64) error {
-	if _, err := s.repo.GetBlock(id); err != nil {
+	blk, err := s.repo.GetBlock(id)
+	if err != nil {
 		return fmt.Errorf("get block %d: %w", id, err)
 	}
 	racks, err := s.repo.ListRacksInBlock(id)
@@ -672,6 +690,17 @@ func (s *BlockService) DeleteBlock(id int64) error {
 	}
 	if err := s.repo.DeleteBlock(id); err != nil {
 		return fmt.Errorf("delete block %d: %w", id, err)
+	}
+	// If this was the last block in the super-block, clean up the super-block's
+	// aggregations so stale spine config doesn't appear when new blocks are added.
+	remaining, err := s.repo.ListBlocks(blk.SuperBlockID)
+	if err == nil && len(remaining) == 0 {
+		sbAggs, err := s.repo.ListAggregations(models.ScopeSuperBlock, blk.SuperBlockID)
+		if err == nil {
+			for _, agg := range sbAggs {
+				_ = s.repo.DeleteAggregation(models.ScopeSuperBlock, blk.SuperBlockID, agg.Plane)
+			}
+		}
 	}
 	slog.Info("block deleted", "blockID", id)
 	return nil

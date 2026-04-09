@@ -64,7 +64,7 @@ func (s *fakeBlockService) ListBlocks(superBlockID int64) ([]*models.Block, erro
 	return out, nil
 }
 
-func (s *fakeBlockService) AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error) {
+func (s *fakeBlockService) AssignAggregation(blockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int, hostLinkSpeedGbps int) (*models.TierAggregationSummary, error) {
 	if _, ok := s.blocks[blockID]; !ok {
 		return nil, models.ErrNotFound
 	}
@@ -147,7 +147,7 @@ func (s *fakeBlockService) ListPortConnections(blockID int64, plane models.Netwo
 	return s.conns[key], nil
 }
 
-func (s *fakeBlockService) AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int) (*models.TierAggregationSummary, error) {
+func (s *fakeBlockService) AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int, hostLinkSpeedGbps int) (*models.TierAggregationSummary, error) {
 	key := fmt.Sprintf("sb:%d:%s", superBlockID, plane)
 	summary := &models.TierAggregationSummary{
 		TierAggregation: models.TierAggregation{
@@ -386,7 +386,7 @@ func TestBlockHandler_GetAggregation(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
 	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
-	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0)
+	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0, 0)
 
 	t.Run("found", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/front_end", nil)
@@ -413,7 +413,7 @@ func TestBlockHandler_DeleteAggregation(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
 	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
-	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0)
+	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0, 0)
 
 	t.Run("deletes successfully", func(t *testing.T) {
 		r := httptest.NewRequest("DELETE", "/api/blocks/1/aggregations/front_end", nil)
@@ -505,7 +505,7 @@ func TestBlockHandler_ListPortConnections(t *testing.T) {
 	svc := newFakeBlockSvc()
 	h := handlers.NewBlockHandler(svc)
 	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
-	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0)
+	svc.AssignAggregation(1, models.NetworkPlaneFrontEnd, 10, 0, 0)
 
 	t.Run("returns empty list", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/api/blocks/1/aggregations/front_end/connections", nil)

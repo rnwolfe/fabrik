@@ -86,6 +86,11 @@ export interface TopologyPlan {
   leaf_uplinks: number;
   total_switches: number;
   total_host_ports: number;
+  bandwidth_oversubscription?: number;
+  host_link_speed_gbps?: number;
+  uplink_speed_gbps?: number;
+  downlink_speed_gbps?: number;
+  bisection_bandwidth_gbps?: number;
 }
 
 export interface FabricMetrics {
@@ -144,6 +149,7 @@ export interface TierAggregationSummary {
   plane: NetworkPlane;
   device_model_id: number;
   spine_count: number;
+  host_link_speed_gbps: number;
   total_ports: number;
   allocated_ports: number;
   available_ports: number;
@@ -291,6 +297,15 @@ export interface DeviceSummary {
   updated_at: string;
 }
 
+export type RackWarningKind = 'power' | 'ru' | 'port';
+
+export interface RackWarning {
+  kind: RackWarningKind;
+  detail: string;
+  delta_w?: number;
+  delta_u?: number;
+}
+
 export interface RackSummary {
   id: number;
   block_id?: number;
@@ -306,6 +321,8 @@ export interface RackSummary {
   used_watts_typical: number;
   used_watts_max: number;
   devices: DeviceSummary[];
+  warnings?: RackWarning[];
+  /** @deprecated use warnings instead */
   warning?: string;
   created_at: string;
   updated_at: string;

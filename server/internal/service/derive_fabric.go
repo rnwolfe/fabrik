@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/rnwolfe/fabrik/server/internal/models"
 )
@@ -21,13 +22,14 @@ type DeriveFabricRepository interface {
 
 // DerivedTier describes one aggregation level within the derived Clos topology.
 type DerivedTier struct {
-	ScopeType      models.AggregationScope `json:"scope_type"`
-	ScopeID        int64                   `json:"scope_id"`
-	ScopeName      string                  `json:"scope_name"`
-	DeviceModel    *models.DeviceModel     `json:"device_model,omitempty"`
-	SpineCount     int                     `json:"spine_count"`
-	PortCount      int                     `json:"port_count"`
-	AllocatedPorts int                     `json:"allocated_ports"`
+	ScopeType         models.AggregationScope `json:"scope_type"`
+	ScopeID           int64                   `json:"scope_id"`
+	ScopeName         string                  `json:"scope_name"`
+	DeviceModel       *models.DeviceModel     `json:"device_model,omitempty"`
+	SpineCount        int                     `json:"spine_count"`
+	PortCount         int                     `json:"port_count"`
+	AllocatedPorts    int                     `json:"allocated_ports"`
+	HostLinkSpeedGbps int                     `json:"host_link_speed_gbps,omitempty"`
 }
 
 // DerivedFabric is the computed Clos topology for a design.
@@ -109,11 +111,23 @@ func (s *DeriveFabricService) DeriveFabric(designID int64, plane models.NetworkP
 		}
 	}
 
-	// Count distinct scope levels that have at least one aggregation.
-	levelsWithAgg := distinctLevels(tiers)
-	stages := levelsWithAgg + 1 // +1 for the leaf layer
-	if stages < 2 {
-		stages = 2
+	// Determine Clos stage count from the hierarchy.
+	//
+	// The block-level agg stores the leaf (ToR) model — its spine_count
+	// defines how many uplink ports connect leaves to spines.  The super-block
+	// agg stores the spine model shared by all blocks — it completes the
+	// 2-stage leaf-spine fabric but does NOT add a 3rd stage.
+	//
+	// Only a site-level agg (super-spine) adds a 3rd stage:
+	//   block only            → 2-stage  (leaf + spine)
+	//   block + super_block   → 2-stage  (leaf + spine, spine model from super_block)
+	//   block + … + site      → 3-stage  (leaf + spine + super-spine)
+	stages := 2
+	for _, t := range tiers {
+		if t.ScopeType == models.ScopeSite {
+			stages = 3
+			break
+		}
 	}
 
 	df := &DerivedFabric{
@@ -146,11 +160,12 @@ func (s *DeriveFabricService) collectTier(scopeType models.AggregationScope, sco
 	}
 
 	tier := &DerivedTier{
-		ScopeType:      scopeType,
-		ScopeID:        scopeID,
-		ScopeName:      name,
-		SpineCount:     agg.SpineCount,
-		AllocatedPorts: allocated,
+		ScopeType:         scopeType,
+		ScopeID:           scopeID,
+		ScopeName:         name,
+		SpineCount:        agg.SpineCount,
+		HostLinkSpeedGbps: agg.HostLinkSpeedGbps,
+		AllocatedPorts:    allocated,
 	}
 
 	dm, err := s.repo.GetDeviceModel(agg.DeviceModelID)
@@ -165,15 +180,6 @@ func (s *DeriveFabricService) collectTier(scopeType models.AggregationScope, sco
 	tier.PortCount = dm.PortCount
 
 	return tier, nil
-}
-
-// distinctLevels returns the number of unique AggregationScope values present in tiers.
-func distinctLevels(tiers []DerivedTier) int {
-	seen := make(map[models.AggregationScope]struct{})
-	for _, t := range tiers {
-		seen[t.ScopeType] = struct{}{}
-	}
-	return len(seen)
 }
 
 // deriveTopology calculates a TopologyPlan from the block-level tier, if present.
@@ -210,7 +216,73 @@ func (s *DeriveFabricService) deriveTopology(tiers []DerivedTier, stages int) *T
 		if err != nil {
 			return nil
 		}
+
+		// Bandwidth overlay: derive port speeds from leaf device model port groups.
+		s.applyBandwidthOverlay(topo, &t)
+
 		return topo
 	}
 	return nil
+}
+
+// applyBandwidthOverlay computes bandwidth-based oversubscription and bisection BW
+// from port group speeds and the optional host link speed override.
+func (s *DeriveFabricService) applyBandwidthOverlay(topo *TopologyPlan, tier *DerivedTier) {
+	dm := tier.DeviceModel
+	if dm == nil || len(dm.PortGroups) < 2 {
+		return
+	}
+
+	// Sort port groups by speed ascending (same heuristic as frontend deriveFromPortGroups).
+	groups := make([]models.PortGroup, len(dm.PortGroups))
+	copy(groups, dm.PortGroups)
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i].SpeedGbps != groups[j].SpeedGbps {
+			return groups[i].SpeedGbps < groups[j].SpeedGbps
+		}
+		return groups[i].Count > groups[j].Count
+	})
+
+	// Highest speed group = uplinks, rest = downlinks.
+	uplinkGroup := groups[len(groups)-1]
+	uplinkSpeed := uplinkGroup.SpeedGbps
+
+	// Downlink speed from port groups (use lowest speed group as the representative speed).
+	downlinkSpeed := groups[0].SpeedGbps
+
+	// Override displayed downlink speed with host link speed if set.
+	effectiveDownlinkSpeed := downlinkSpeed
+	if tier.HostLinkSpeedGbps > 0 {
+		effectiveDownlinkSpeed = tier.HostLinkSpeedGbps
+	}
+
+	// Compute utilized uplinks from the uplink port group, capped by the derived topology.
+	utilizedUplinks := topo.LeafUplinks
+	if utilizedUplinks > uplinkGroup.Count {
+		utilizedUplinks = uplinkGroup.Count
+	}
+
+	// Compute downlinks and downlink bandwidth directly from all non-uplink groups.
+	downlinks := 0
+	downlinkBW := 0.0
+	for _, group := range groups[:len(groups)-1] {
+		downlinks += group.Count
+
+		groupSpeed := group.SpeedGbps
+		if tier.HostLinkSpeedGbps > 0 {
+			groupSpeed = tier.HostLinkSpeedGbps
+		}
+		downlinkBW += float64(group.Count) * float64(groupSpeed)
+	}
+
+	if utilizedUplinks > 0 && uplinkSpeed > 0 && downlinkBW > 0 {
+		uplinkBW := float64(utilizedUplinks) * float64(uplinkSpeed)
+		topo.BandwidthOversubscription = downlinkBW / uplinkBW
+	}
+
+	topo.LeafDownlinks = downlinks
+	topo.HostLinkSpeedGbps = tier.HostLinkSpeedGbps
+	topo.UplinkSpeedGbps = uplinkSpeed
+	topo.DownlinkSpeedGbps = effectiveDownlinkSpeed
+	topo.BisectionBandwidthGbps = float64(topo.SpineCount) * float64(utilizedUplinks) * float64(uplinkSpeed)
 }

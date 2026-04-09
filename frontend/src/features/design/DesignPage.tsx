@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,6 +11,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import DeviceModelPicker, { PickerGuardProvider, usePickerGuard } from '@/components/DeviceModelPicker';
 import { blocksApi, scaffoldApi, superBlocksApi } from '@/api/blocks';
 import { racksApi } from '@/api/racks';
 import { catalogApi } from '@/api/catalog';
@@ -32,12 +34,17 @@ import BlockCard from './BlockCard';
 import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
 import RackElevation from './RackElevation';
+import MetricsStrip from './MetricsStrip';
 import type { Block, BlockAggregationSummary, RackSummary, DeviceModel } from '@/models';
 
 // ─── New Block form schema ───────────────────────────────────────────────────
 
 const newBlockSchema = z.object({
   name: z.string().min(1, 'Name required'),
+  leaf_model_id: z.preprocess(
+    (v) => (v === '' || v == null ? undefined : Number(v)),
+    z.number().int().optional()
+  ),
 });
 type NewBlockForm = z.infer<typeof newBlockSchema>;
 
@@ -58,10 +65,17 @@ type AddRackForm = z.infer<typeof addRackSchema>;
 export default function DesignPage() {
   const { activeDesignId, setActiveDesignId } = useDesign();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Selection state
   const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null);
   const [selectedRackId, setSelectedRackId] = useState<number | null>(null);
+
+  // Deep-link toast notification
+  const [deepLinkToast, setDeepLinkToast] = useState<string | null>(null);
+
+  // Whether we've already processed the ?block= deep-link param this mount
+  const deepLinkHandled = useRef(false);
 
   // Dialog state
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
@@ -74,6 +88,8 @@ export default function DesignPage() {
   const [blockSpineCount, setBlockSpineCount] = useState<Map<number, number>>(new Map());
   // Per-block spine model (local state — not yet persisted in backend)
   const [blockSpineModel, setBlockSpineModel] = useState<Map<number, number>>(new Map());
+  // Per-block host link speed in Gbps (0 = use port group default)
+  const [blockHostLinkSpeed, setBlockHostLinkSpeed] = useState<Map<number, number>>(new Map());
 
   // ── Data queries ─────────────────────────────────────────────────────────
 
@@ -149,6 +165,38 @@ export default function DesignPage() {
     }
   }, [blocks, selectedBlockId]);
 
+  // Deep-link: read ?block=<id> on mount (once blocks are loaded), select that block,
+  // scroll its card into view, and remove the param from the URL.
+  const blockCardRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    const blockParam = searchParams.get('block');
+    if (!blockParam || !blocks) return;
+    const targetId = Number(blockParam);
+    if (isNaN(targetId)) {
+      // Malformed param — remove it silently.
+      setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('block'); return next; }, { replace: true });
+      deepLinkHandled.current = true;
+      return;
+    }
+    const found = blocks.find((b) => b.id === targetId);
+    if (!found) {
+      setDeepLinkToast(`Block #${targetId} not found in this design.`);
+      setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('block'); return next; }, { replace: true });
+      deepLinkHandled.current = true;
+      return;
+    }
+    setSelectedBlockId(targetId);
+    setSelectedRackId(null);
+    // Scroll the block card into view after the next paint.
+    setTimeout(() => {
+      const el = blockCardRefs.current.get(targetId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('block'); return next; }, { replace: true });
+    deepLinkHandled.current = true;
+  }, [blocks, searchParams, setSearchParams]);
+
   const selectedBlock = (blocks ?? []).find((b: Block) => b.id === selectedBlockId) ?? null;
 
   // Fetch persisted super-block spine aggregation when a block is selected
@@ -173,12 +221,16 @@ export default function DesignPage() {
       if (prev.has(blockId)) return prev;
       return new Map(prev).set(blockId, superBlockSpineAgg.spine_count);
     });
-  }, [selectedBlock, superBlockSpineAgg, setBlockSpineModel, setBlockSpineCount]);
+    setBlockHostLinkSpeed((prev) => {
+      if (prev.has(blockId)) return prev;
+      return new Map(prev).set(blockId, superBlockSpineAgg.host_link_speed_gbps ?? 0);
+    });
+  }, [selectedBlock, superBlockSpineAgg, setBlockSpineModel, setBlockSpineCount, setBlockHostLinkSpeed]);
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const createBlockMutation = useMutation({
-    mutationFn: (data: { super_block_id: number; name: string }) =>
+    mutationFn: (data: { super_block_id: number; name: string; leaf_model_id?: number }) =>
       blocksApi.create(data),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['blocks'] });
@@ -223,10 +275,23 @@ export default function DesignPage() {
   });
 
   const saveSpineAggMutation = useMutation({
-    mutationFn: ({ superBlockId, plane, deviceModelId, spineCount }: { superBlockId: number; plane: string; deviceModelId: number; spineCount: number }) =>
-      superBlocksApi.assignAggregation(superBlockId, plane, deviceModelId, spineCount),
+    mutationFn: async ({ superBlockId, plane, deviceModelId, spineCount, hostLinkSpeedGbps }: { superBlockId: number; plane: string; deviceModelId: number; spineCount: number; hostLinkSpeedGbps?: number }) => {
+      const result = await superBlocksApi.assignAggregation(superBlockId, plane, deviceModelId, spineCount, hostLinkSpeedGbps);
+
+      const childBlocks = (blocks ?? []).filter((block) => block.super_block_id === superBlockId);
+      if (childBlocks.length > 0) {
+        await Promise.all(
+          childBlocks.map((block) =>
+            blocksApi.assignAggregation(block.id, plane, deviceModelId, spineCount, hostLinkSpeedGbps)
+          )
+        );
+      }
+
+      return result;
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['super-block-agg', variables.superBlockId, variables.plane] });
+      queryClient.invalidateQueries({ queryKey: ['aggs'] });
     },
   });
 
@@ -235,17 +300,24 @@ export default function DesignPage() {
       blocksApi.placeSpineDevices(blockId, deviceModelId, count),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['rack'] });
     },
   });
 
   const deleteBlockMutation = useMutation({
-    mutationFn: (blockId: number) => blocksApi.delete(blockId),
-    onSuccess: () => {
+    mutationFn: (block: Block) => blocksApi.delete(block.id),
+    onSuccess: (_data, block) => {
       queryClient.invalidateQueries({ queryKey: ['blocks'] });
       queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['rack'] });
       queryClient.invalidateQueries({ queryKey: ['aggs'] });
+      queryClient.invalidateQueries({ queryKey: ['super-block-agg', block.super_block_id] });
       setSelectedBlockId(null);
       setSelectedRackId(null);
+      // Clear stale per-block spine state so a new block starts fresh.
+      setBlockSpineModel((prev) => { const m = new Map(prev); m.delete(block.id); return m; });
+      setBlockSpineCount((prev) => { const m = new Map(prev); m.delete(block.id); return m; });
+      setBlockHostLinkSpeed((prev) => { const m = new Map(prev); m.delete(block.id); return m; });
     },
   });
 
@@ -264,6 +336,7 @@ export default function DesignPage() {
     register: blockRegister,
     handleSubmit: blockHandleSubmit,
     reset: blockReset,
+    setValue: blockSetValue,
   } = useForm<NewBlockForm>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(newBlockSchema) as any,
@@ -289,6 +362,7 @@ export default function DesignPage() {
     createBlockMutation.mutate({
       super_block_id: superBlockId,
       name: data.name,
+      leaf_model_id: data.leaf_model_id,
     });
   });
 
@@ -314,6 +388,7 @@ export default function DesignPage() {
       // Use the count BlockDetailPanel computed as the default (port-group aware).
       // Avoids persisting 0 when the user hasn't touched the stepper yet.
       const count = blockSpineCount.get(blockId) ?? initialSpineCount;
+      const hostSpeed = blockHostLinkSpeed.get(blockId) ?? 0;
       setBlockSpineModel((prev) => new Map(prev).set(blockId, deviceModelId));
       setBlockSpineCount((prev) => prev.has(blockId) ? prev : new Map(prev).set(blockId, count));
       if (!selectedBlock) return;
@@ -322,10 +397,11 @@ export default function DesignPage() {
         plane: 'front_end',
         deviceModelId,
         spineCount: count,
+        hostLinkSpeedGbps: hostSpeed,
       });
       placeSpineDevicesMutation.mutate({ blockId, deviceModelId, count });
     },
-    [selectedBlock, blockSpineCount, saveSpineAggMutation, placeSpineDevicesMutation]
+    [selectedBlock, blockSpineCount, blockHostLinkSpeed, saveSpineAggMutation, placeSpineDevicesMutation]
   );
 
   const spineCountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -335,6 +411,7 @@ export default function DesignPage() {
     if (!selectedBlock) return;
     const effectiveSpineModelId = blockSpineModel.get(blockId);
     if (!effectiveSpineModelId) return;
+    const hostSpeed = blockHostLinkSpeed.get(blockId) ?? 0;
 
     // Debounce the save — rapid +/- clicks only fire one request
     if (spineCountTimerRef.current) clearTimeout(spineCountTimerRef.current);
@@ -344,6 +421,7 @@ export default function DesignPage() {
         plane: 'front_end',
         deviceModelId: effectiveSpineModelId,
         spineCount: value,
+        hostLinkSpeedGbps: hostSpeed,
       });
       placeSpineDevicesMutation.mutate({
         blockId,
@@ -351,7 +429,28 @@ export default function DesignPage() {
         count: value,
       });
     }, 400);
-  }, [selectedBlock, blockSpineModel, saveSpineAggMutation, placeSpineDevicesMutation]);
+  }, [selectedBlock, blockSpineModel, blockHostLinkSpeed, saveSpineAggMutation, placeSpineDevicesMutation]);
+
+  const hostLinkSpeedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleHostLinkSpeedChange = useCallback((blockId: number, value: number) => {
+    setBlockHostLinkSpeed((prev) => new Map(prev).set(blockId, value));
+    if (!selectedBlock) return;
+    const effectiveSpineModelId = blockSpineModel.get(blockId);
+    if (!effectiveSpineModelId) return;
+    const count = blockSpineCount.get(blockId) ?? 0;
+
+    if (hostLinkSpeedTimerRef.current) clearTimeout(hostLinkSpeedTimerRef.current);
+    hostLinkSpeedTimerRef.current = setTimeout(() => {
+      saveSpineAggMutation.mutate({
+        superBlockId: selectedBlock.super_block_id,
+        plane: 'front_end',
+        deviceModelId: effectiveSpineModelId,
+        spineCount: count,
+        hostLinkSpeedGbps: value,
+      });
+    }, 400);
+  }, [selectedBlock, blockSpineModel, blockSpineCount, saveSpineAggMutation]);
 
   // ── No design selected ─────────────────────────────────────────────────
 
@@ -425,6 +524,9 @@ export default function DesignPage() {
         </div>
       </div>
 
+      {/* Metrics strip */}
+      <MetricsStrip designId={activeDesignId} />
+
       {/* Two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: Block canvas */}
@@ -459,29 +561,33 @@ export default function DesignPage() {
           ) : (
             <div className="flex flex-col gap-2 px-2 pb-4">
               {(blocks ?? []).map((block: Block) => (
-                <BlockCard
+                <div
                   key={block.id}
-                  block={block}
-                  aggs={aggsByBlock?.get(block.id) ?? []}
-                  racks={racksByBlock.get(block.id) ?? []}
-                  isSelected={selectedBlockId === block.id}
-                  selectedRackId={selectedRackId}
-                  onSelect={() => {
-                    setSelectedBlockId(block.id);
-                    setSelectedRackId(null);
-                  }}
-                  onSelectRack={(rackId) => {
-                    setSelectedBlockId(block.id);
-                    setSelectedRackId(rackId);
-                  }}
-                  onAddRack={() => {
-                    const racks = racksByBlock.get(block.id) ?? [];
-                    rackReset({ name: `Rack ${racks.length + 1}` });
-                    setRackDialogBlockId(block.id);
-                  }}
-                  onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
-                  onDelete={() => setBlockToDelete(block)}
-                />
+                  ref={(el) => { blockCardRefs.current.set(block.id, el); }}
+                >
+                  <BlockCard
+                    block={block}
+                    aggs={aggsByBlock?.get(block.id) ?? []}
+                    racks={racksByBlock.get(block.id) ?? []}
+                    isSelected={selectedBlockId === block.id}
+                    selectedRackId={selectedRackId}
+                    onSelect={() => {
+                      setSelectedBlockId(block.id);
+                      setSelectedRackId(null);
+                    }}
+                    onSelectRack={(rackId) => {
+                      setSelectedBlockId(block.id);
+                      setSelectedRackId(rackId);
+                    }}
+                    onAddRack={() => {
+                      const racks = racksByBlock.get(block.id) ?? [];
+                      rackReset({ name: `Rack ${racks.length + 1}` });
+                      setRackDialogBlockId(block.id);
+                    }}
+                    onRemoveRack={(rackId) => removeRackMutation.mutate(rackId)}
+                    onDelete={() => setBlockToDelete(block)}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -499,7 +605,9 @@ export default function DesignPage() {
               networkDevices={networkDevices}
               spineModelId={blockSpineModel.get(selectedBlock.id)}
               spineCount={blockSpineCount.get(selectedBlock.id) ?? null}
+              hostLinkSpeedGbps={blockHostLinkSpeed.get(selectedBlock.id) ?? 0}
               onSpineCountChange={(v) => handleSpineCountChange(selectedBlock.id, v)}
+              onHostLinkSpeedChange={(v) => handleHostLinkSpeedChange(selectedBlock.id, v)}
               onAssignSpine={(id, initialCount) => handleAssignSpine(selectedBlock.id, id, initialCount)}
               onAssignLeaf={(id) => handleAssignLeaf(selectedBlock.id, id)}
             />
@@ -514,13 +622,17 @@ export default function DesignPage() {
       </div>
 
       {/* ── New Block Dialog ─────────────────────────────────────────────── */}
-      <NewBlockDialogInner
-        open={blockDialogOpen}
-        onOpenChange={setBlockDialogOpen}
-        onSubmit={handleCreateBlock}
-        register={blockRegister}
-        isPending={createBlockMutation.isPending}
-      />
+      <PickerGuardProvider>
+        <NewBlockDialogInner
+          open={blockDialogOpen}
+          onOpenChange={setBlockDialogOpen}
+          onSubmit={handleCreateBlock}
+          register={blockRegister}
+          isPending={createBlockMutation.isPending}
+          networkDevices={networkDevices}
+          onSelectLeaf={(id) => blockSetValue('leaf_model_id', id)}
+        />
+      </PickerGuardProvider>
 
       {/* ── Delete Block Dialog ──────────────────────────────────────────── */}
       <Dialog open={blockToDelete !== null} onOpenChange={(open) => !open && setBlockToDelete(null)}>
@@ -538,7 +650,7 @@ export default function DesignPage() {
               disabled={deleteBlockMutation.isPending}
               onClick={() => {
                 if (!blockToDelete) return;
-                deleteBlockMutation.mutate(blockToDelete.id, {
+                deleteBlockMutation.mutate(blockToDelete, {
                   onSuccess: () => setBlockToDelete(null),
                 });
               }}
@@ -605,25 +717,57 @@ export default function DesignPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Deep-link toast: non-existent block notification */}
+      {deepLinkToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-3 shadow-lg text-sm"
+        >
+          <span className="text-muted-foreground">{deepLinkToast}</span>
+          <button
+            onClick={() => setDeepLinkToast(null)}
+            className="ml-2 text-muted-foreground hover:text-foreground"
+            aria-label="Dismiss notification"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
+// Extracted so usePickerGuard hook can be called inside PickerGuardProvider
 function NewBlockDialogInner({
   open,
   onOpenChange,
   onSubmit,
   register,
   isPending,
+  networkDevices,
+  onSelectLeaf,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
   register: ReturnType<typeof useForm<NewBlockForm>>['register'];
   isPending: boolean;
+  networkDevices: DeviceModel[];
+  onSelectLeaf: (id: number) => void;
 }) {
+  const pickerOpen = usePickerGuard();
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        // Don't close the dialog while the picker popover is open
+        if (!v && pickerOpen) return;
+        onOpenChange(v);
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New Block</DialogTitle>
@@ -632,6 +776,17 @@ function NewBlockDialogInner({
           <div className="space-y-1.5">
             <Label htmlFor="block-name">Name</Label>
             <Input id="block-name" {...register('name')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Leaf Switch</Label>
+            <DeviceModelPicker
+              devices={networkDevices}
+              onSelect={onSelectLeaf}
+              placeholder="Select leaf model…"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              The leaf switch model determines port allocation and oversubscription.
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

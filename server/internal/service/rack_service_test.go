@@ -614,6 +614,92 @@ func TestRackService_GetRackSummary_PowerWarning(t *testing.T) {
 	}
 }
 
+func TestRackService_GetRackSummary_RUOverflowWarning(t *testing.T) {
+	svc, _, rr := newRackSvc()
+
+	// A 1U device that we'll place twice via the repo directly to force overflow.
+	dmID := rr.nextDeviceID + 1
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "A", Model: "B", HeightU: 1, PowerWattsTypical: 100}
+	rr.nextDeviceID = dmID
+
+	// Rack with only 1U capacity; we seed two 1U devices directly to simulate overflow.
+	rack, _ := svc.CreateRack("overflow-rack", "", nil, nil, 1, 5000, "")
+	rr.seedDevice(&models.Device{RackID: rack.ID, DeviceModelID: dmID, Name: "dev1", Position: 1})
+	rr.seedDevice(&models.Device{RackID: rack.ID, DeviceModelID: dmID, Name: "dev2", Position: 2})
+
+	summary, err := svc.GetRackSummary(rack.ID)
+	if err != nil {
+		t.Fatalf("GetRackSummary: %v", err)
+	}
+
+	// UsedU should be 2 (2 × 1U devices), but rack is only 1U.
+	if summary.UsedU != 2 {
+		t.Errorf("expected UsedU 2, got %d", summary.UsedU)
+	}
+	// AvailableU must be clamped to 0 (not negative).
+	if summary.AvailableU != 0 {
+		t.Errorf("expected AvailableU 0 (clamped), got %d", summary.AvailableU)
+	}
+
+	// A structured RU warning must be present.
+	var ruWarn *models.RackWarning
+	for i := range summary.Warnings {
+		if summary.Warnings[i].Kind == models.RackWarningKindRU {
+			ruWarn = &summary.Warnings[i]
+			break
+		}
+	}
+	if ruWarn == nil {
+		t.Fatal("expected an RU structured warning in summary.Warnings, got none")
+	}
+	if ruWarn.DeltaU == nil || *ruWarn.DeltaU != 1 {
+		t.Errorf("expected DeltaU 1 (overflow by 1U), got %v", ruWarn.DeltaU)
+	}
+	if ruWarn.Detail == "" {
+		t.Error("expected non-empty Detail in RU warning")
+	}
+}
+
+func TestRackService_GetRackSummary_PowerOverrunWarning(t *testing.T) {
+	svc, _, rr := newRackSvc()
+
+	// Device uses 1500W typical; rack capacity is 1000W → 150% > 100% warn threshold.
+	dmID := rr.nextDeviceID + 1
+	rr.deviceModels[dmID] = &models.DeviceModel{ID: dmID, Vendor: "X", Model: "Y", HeightU: 1, PowerWattsTypical: 1500}
+	rr.nextDeviceID = dmID
+
+	rack, _ := svc.CreateRack("power-overrun-rack", "", nil, nil, 42, 1000, "")
+	// Seed device directly to bypass placement hard limits.
+	rr.seedDevice(&models.Device{RackID: rack.ID, DeviceModelID: dmID, Name: "big-device", Position: 1})
+
+	summary, err := svc.GetRackSummary(rack.ID)
+	if err != nil {
+		t.Fatalf("GetRackSummary: %v", err)
+	}
+
+	// A structured power warning must be present.
+	var pwrWarn *models.RackWarning
+	for i := range summary.Warnings {
+		if summary.Warnings[i].Kind == models.RackWarningKindPower {
+			pwrWarn = &summary.Warnings[i]
+			break
+		}
+	}
+	if pwrWarn == nil {
+		t.Fatal("expected a power structured warning in summary.Warnings, got none")
+	}
+	if pwrWarn.DeltaW == nil {
+		t.Error("expected non-nil DeltaW in power warning")
+	}
+	if pwrWarn.Detail == "" {
+		t.Error("expected non-empty Detail in power warning")
+	}
+	// Legacy string warning must also be set for backward compatibility.
+	if summary.Warning == "" {
+		t.Error("expected legacy Warning string to be set for backward compatibility")
+	}
+}
+
 func TestRackService_PlaceDevice_ManagementRoles(t *testing.T) {
 	tests := []struct {
 		name           string
