@@ -32,6 +32,7 @@ import {
   Network,
   ChevronDown,
 } from 'lucide-react';
+import { HelpLink } from '@/components/HelpLink';
 import type { FabricTier } from '@/models';
 
 function oversubColor(ratio: number) {
@@ -132,6 +133,8 @@ export default function MetricsPage() {
               icon={BarChart3}
               label="Bisection BW"
               value={`${metrics.bisection_bandwidth_gbps.toFixed(1)} Gbps`}
+              helpArticle="bisection-bandwidth"
+              helpAnchor="full-bisection"
             />
             <SummaryCard
               icon={Zap}
@@ -356,11 +359,15 @@ function SummaryCard({
   label,
   value,
   valueClass,
+  helpArticle,
+  helpAnchor,
 }: {
   icon: typeof Server;
   label: string;
   value: string;
   valueClass?: string;
+  helpArticle?: string;
+  helpAnchor?: string;
 }) {
   return (
     <Card size="sm">
@@ -368,6 +375,9 @@ function SummaryCard({
         <div className="flex items-center gap-2 text-muted-foreground">
           <Icon className="size-3.5" />
           <span className="text-xs">{label}</span>
+          {helpArticle && (
+            <HelpLink article={helpArticle} anchor={helpAnchor} className="ml-auto" />
+          )}
         </div>
         <p className={`mt-1 font-mono text-lg font-semibold ${valueClass ?? ''}`}>{value}</p>
       </CardContent>
