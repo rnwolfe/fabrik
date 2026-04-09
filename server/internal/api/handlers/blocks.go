@@ -36,6 +36,7 @@ type BlockService interface {
 	ListPortConnections(blockID int64, plane models.NetworkPlane) ([]*models.TierPortConnection, error)
 	PlaceSpineDevices(blockID, spineModelID int64, count int) error
 	DeleteBlock(id int64) error
+	ReparentBlock(blockID, superBlockID int64) (*models.Block, error)
 }
 
 // BlockHandler handles HTTP requests for block and block aggregation resources.
@@ -453,13 +454,15 @@ func (h *BlockHandler) PlaceSpineDevices(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 }
 
-// patchBlockRequest is the request body for PatchBlock.
+// patchBlockRequest allows partial updates to a block.
+// Exactly one field must be set per request.
 type patchBlockRequest struct {
-	LeafModelID *int64 `json:"leaf_model_id"`
+	LeafModelID  *int64 `json:"leaf_model_id"`
+	SuperBlockID *int64 `json:"super_block_id"`
 }
 
 // PatchBlock handles PATCH /api/blocks/{id}.
-// Currently supports updating leaf_model_id (assigns the front_end aggregation).
+// Supports: leaf_model_id (assigns front_end aggregation) or super_block_id (reparents block).
 func (h *BlockHandler) PatchBlock(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(w, r, "id")
 	if !ok {
@@ -478,30 +481,42 @@ func (h *BlockHandler) PatchBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.LeafModelID == nil {
-		writeError(w, http.StatusBadRequest, "leaf_model_id is required")
-		return
+	switch {
+	case req.LeafModelID != nil:
+		summary, err := h.svc.AssignLeafModel(id, *req.LeafModelID)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, models.ErrConstraintViolation) {
+				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+			if errors.Is(err, models.ErrAggModelDownsize) {
+				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+			slog.Error("patch block leaf model", "err", err, "blockID", id)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		writeJSON(w, http.StatusOK, summary)
+	case req.SuperBlockID != nil:
+		b, err := h.svc.ReparentBlock(id, *req.SuperBlockID)
+		if err != nil {
+			if errors.Is(err, models.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "block not found")
+				return
+			}
+			slog.Error("reparent block", "err", err, "blockID", id)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		writeJSON(w, http.StatusOK, b)
+	default:
+		writeError(w, http.StatusBadRequest, "leaf_model_id or super_block_id is required")
 	}
-
-	summary, err := h.svc.AssignLeafModel(id, *req.LeafModelID)
-	if err != nil {
-		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
-			return
-		}
-		if errors.Is(err, models.ErrConstraintViolation) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
-			return
-		}
-		if errors.Is(err, models.ErrAggModelDownsize) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
-			return
-		}
-		slog.Error("patch block leaf model", "err", err, "blockID", id)
-		writeError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-	writeJSON(w, http.StatusOK, summary)
 }
 
 // DeleteBlock handles DELETE /api/blocks/{id}.

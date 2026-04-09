@@ -303,6 +303,16 @@ func (r *fakeBlockRepo) DeleteRack(id int64) error {
 	return nil
 }
 
+func (r *fakeBlockRepo) ReparentBlock(blockID, superBlockID int64) (*models.Block, error) {
+	b, ok := r.blocks[blockID]
+	if !ok {
+		return nil, models.ErrNotFound
+	}
+	b.SuperBlockID = superBlockID
+	r.blocks[blockID] = b
+	return b, nil
+}
+
 // --- helper to create a TierAggregation at block scope (used in test setup) ---
 
 func blockAgg(blockID, deviceModelID int64, plane models.NetworkPlane) *models.TierAggregation {
@@ -948,6 +958,36 @@ func TestBlockService_PlaceSpineDevices(t *testing.T) {
 			t.Errorf("want 2 spines total, got %d", got)
 		}
 	})
+}
+
+func TestReparentBlock_Success(t *testing.T) {
+	repo := newFakeBlockRepo()
+	svc := service.NewBlockService(repo)
+
+	block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "row-A"})
+
+	updated, err := svc.ReparentBlock(block.ID, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.SuperBlockID != 2 {
+		t.Errorf("expected super_block_id 2, got %d", updated.SuperBlockID)
+	}
+	// Verify the change is persisted in the repo.
+	stored, _ := repo.GetBlock(block.ID)
+	if stored.SuperBlockID != 2 {
+		t.Errorf("expected stored super_block_id 2, got %d", stored.SuperBlockID)
+	}
+}
+
+func TestReparentBlock_NotFound(t *testing.T) {
+	repo := newFakeBlockRepo()
+	svc := service.NewBlockService(repo)
+
+	_, err := svc.ReparentBlock(9999, 1)
+	if !errors.Is(err, models.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
 }
 
 func TestBlockService_AssignLeafModel(t *testing.T) {

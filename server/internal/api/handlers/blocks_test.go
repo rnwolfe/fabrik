@@ -209,6 +209,16 @@ func (s *fakeBlockService) DeleteBlock(id int64) error {
 	return nil
 }
 
+func (s *fakeBlockService) ReparentBlock(blockID, superBlockID int64) (*models.Block, error) {
+	b, ok := s.blocks[blockID]
+	if !ok {
+		return nil, models.ErrNotFound
+	}
+	b.SuperBlockID = superBlockID
+	s.blocks[blockID] = b
+	return b, nil
+}
+
 // --- helpers ---
 
 func blockRequest(t *testing.T, method, url string, body any) *http.Request {
@@ -619,7 +629,7 @@ func TestBlockHandler_PatchBlock(t *testing.T) {
 		}
 	})
 
-	t.Run("block not found returns 404", func(t *testing.T) {
+	t.Run("block not found (leaf_model_id) returns 404", func(t *testing.T) {
 		body := map[string]any{"leaf_model_id": 10}
 		r := blockRequest(t, "PATCH", "/api/blocks/9999", body)
 		r.SetPathValue("id", "9999")
@@ -639,7 +649,32 @@ func TestBlockHandler_PatchBlock(t *testing.T) {
 		}
 	})
 
-	t.Run("missing leaf_model_id returns 400", func(t *testing.T) {
+	t.Run("reparent block via super_block_id", func(t *testing.T) {
+		body := map[string]any{"super_block_id": 2}
+		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var b models.Block
+		json.NewDecoder(w.Body).Decode(&b)
+		if b.SuperBlockID != 2 {
+			t.Errorf("expected super_block_id 2, got %d", b.SuperBlockID)
+		}
+	})
+
+	t.Run("block not found (super_block_id) returns 404", func(t *testing.T) {
+		body := map[string]any{"super_block_id": 2}
+		r := blockRequest(t, "PATCH", "/api/blocks/9999", body)
+		r.SetPathValue("id", "9999")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("missing any patchable field returns 400", func(t *testing.T) {
 		body := map[string]any{}
 		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
 		r.SetPathValue("id", "1")

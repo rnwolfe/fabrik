@@ -41,6 +41,10 @@ export const blocksApi = {
   // Port connections
   listConnections: (blockId: number, plane: string) =>
     api.get<TierPortConnection[]>(`/blocks/${blockId}/aggregations/${plane}/connections`),
+
+  // Reparent a block to a different super-block
+  reparent: (blockId: number, superBlockId: number) =>
+    api.patch<Block>(`/blocks/${blockId}`, { super_block_id: superBlockId }),
 };
 
 export const scaffoldApi = {

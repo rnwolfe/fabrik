@@ -80,6 +80,15 @@ func main() {
 	metricsSvc := service.NewMetricsService(metricsStore, deriveFabricSvc)
 	metricsHandler := handlers.NewMetricsHandler(metricsSvc)
 
+	// Wire up site and super-block hierarchy
+	siteStore := store.NewSiteStore(db)
+	superBlockStore := store.NewSuperBlockStore(db)
+	hierarchyStore := store.NewHierarchyStore(db)
+	siteSvc := service.NewSiteService(siteStore, hierarchyStore)
+	superBlockSvc := service.NewSuperBlockService(superBlockStore)
+	siteHandler := handlers.NewSiteHandler(siteSvc)
+	superBlockHandler := handlers.NewSuperBlockHandler(superBlockSvc)
+
 	// Wire up knowledge base
 	knowledgeSub, err := fs.Sub(docsFS, "docs/knowledge")
 	if err != nil {
@@ -97,7 +106,7 @@ func main() {
 	})
 
 	// Register domain routes
-	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler, managementHandler, capacityHandler, metricsHandler, deriveFabricHandler)
+	api.RegisterRoutes(mux, designHandler, knowledgeHandler, deviceModelHandler, rackHandler, fabricHandler, blockHandler, managementHandler, capacityHandler, metricsHandler, deriveFabricHandler, siteHandler, superBlockHandler)
 
 	addr := ":8080"
 	if port := os.Getenv("FABRIK_PORT"); port != "" {

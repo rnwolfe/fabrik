@@ -222,6 +222,7 @@ func (s *alwaysErrBlockSvc) ListPortConnections(_ int64, _ models.NetworkPlane) 
 }
 func (s *alwaysErrBlockSvc) PlaceSpineDevices(_, _ int64, _ int) error { return nil }
 func (s *alwaysErrBlockSvc) DeleteBlock(_ int64) error                 { return nil }
+func (s *alwaysErrBlockSvc) ReparentBlock(_, _ int64) (*models.Block, error) { return nil, nil }
 func (s *alwaysErrBlockSvc) AssignLeafModel(_ int64, _ int64) (*models.TierAggregationSummary, error) {
 	return nil, nil
 }
