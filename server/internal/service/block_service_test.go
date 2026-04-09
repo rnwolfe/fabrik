@@ -925,6 +925,36 @@ func TestBlockService_PlaceSpineDevices(t *testing.T) {
 	})
 }
 
+func TestReparentBlock_Success(t *testing.T) {
+	repo := newFakeBlockRepo()
+	svc := service.NewBlockService(repo)
+
+	block, _ := repo.CreateBlock(&models.Block{SuperBlockID: 1, Name: "row-A"})
+
+	updated, err := svc.ReparentBlock(block.ID, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.SuperBlockID != 2 {
+		t.Errorf("expected super_block_id 2, got %d", updated.SuperBlockID)
+	}
+	// Verify the change is persisted in the repo.
+	stored, _ := repo.GetBlock(block.ID)
+	if stored.SuperBlockID != 2 {
+		t.Errorf("expected stored super_block_id 2, got %d", stored.SuperBlockID)
+	}
+}
+
+func TestReparentBlock_NotFound(t *testing.T) {
+	repo := newFakeBlockRepo()
+	svc := service.NewBlockService(repo)
+
+	_, err := svc.ReparentBlock(9999, 1)
+	if !errors.Is(err, models.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestBlockService_DeleteBlock(t *testing.T) {
 	newRepoWithBlock := func() (*fakeBlockRepo, *service.BlockService, int64) {
 		repo := newFakeBlockRepo()

@@ -98,7 +98,9 @@ func (s *SuperBlockStore) UpdateSuperBlock(id int64, name, description string) (
 	return out, nil
 }
 
-// DeleteSuperBlock deletes a super-block by id (CASCADE deletes blocks).
+// DeleteSuperBlock deletes a super-block by id.
+// The service layer prevents deletion when child blocks exist;
+// any DB-level cascade is an implementation detail, not a contract.
 func (s *SuperBlockStore) DeleteSuperBlock(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM super_blocks WHERE id = ?`, id)
 	if err != nil {

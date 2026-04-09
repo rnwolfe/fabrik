@@ -98,7 +98,9 @@ func (s *SiteStore) UpdateSite(id int64, name, description string) (*models.Site
 	return out, nil
 }
 
-// DeleteSite deletes a site by id (CASCADE deletes super_blocks and blocks).
+// DeleteSite deletes a site by id.
+// The service layer prevents deletion when child super-blocks exist;
+// any DB-level cascade is an implementation detail, not a contract.
 func (s *SiteStore) DeleteSite(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM sites WHERE id = ?`, id)
 	if err != nil {

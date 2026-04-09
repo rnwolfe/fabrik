@@ -10,6 +10,8 @@ export const superblocksApi = {
     api.get<SuperBlock>(`/superblocks/${id}`),
   update: (id: number, data: { name: string; description?: string }) =>
     api.put<SuperBlock>(`/superblocks/${id}`, data),
+  patch: (id: number, data: { name?: string; description?: string }) =>
+    api.patch<SuperBlock>(`/superblocks/${id}`, data),
   delete: (id: number) =>
     api.delete(`/superblocks/${id}`),
 };

@@ -620,6 +620,47 @@ func TestBlockHandler_DeleteBlock(t *testing.T) {
 	})
 }
 
+func TestBlockHandler_PatchBlock(t *testing.T) {
+	svc := newFakeBlockSvc()
+	h := handlers.NewBlockHandler(svc)
+	svc.CreateBlock(1, "row-A", "", nil, nil, 0)
+
+	t.Run("success - reparent block", func(t *testing.T) {
+		body := map[string]any{"super_block_id": 2}
+		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var b models.Block
+		json.NewDecoder(w.Body).Decode(&b)
+		if b.SuperBlockID != 2 {
+			t.Errorf("expected super_block_id 2, got %d", b.SuperBlockID)
+		}
+	})
+
+	t.Run("missing super_block_id", func(t *testing.T) {
+		body := map[string]any{}
+		r := blockRequest(t, "PATCH", "/api/blocks/1", body)
+		r.SetPathValue("id", "1")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("block not found", func(t *testing.T) {
+		body := map[string]any{"super_block_id": 2}
+		r := blockRequest(t, "PATCH", "/api/blocks/9999", body)
+		r.SetPathValue("id", "9999")
+		w := blockResponse(t, http.HandlerFunc(h.PatchBlock), r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+}
+
 // Verify fakeBlockService satisfies the handlers.BlockService interface.
 var _ handlers.BlockService = (*fakeBlockService)(nil)
 

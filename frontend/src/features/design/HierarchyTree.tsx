@@ -229,7 +229,7 @@ function SuperBlockSection({ sb, allSuperBlocks, selectedBlockId, onSelectBlock,
   const queryClient = useQueryClient();
 
   const updateMutation = useMutation({
-    mutationFn: (name: string) => superblocksApi.update(sb.id, { name }),
+    mutationFn: (name: string) => superblocksApi.update(sb.id, { name, description: sb.description ?? '' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hierarchy', designId] }),
   });
 
@@ -333,7 +333,7 @@ function SiteSection({ site, allSuperBlocks, selectedBlockId, onSelectBlock, des
   const queryClient = useQueryClient();
 
   const updateMutation = useMutation({
-    mutationFn: (name: string) => sitesApi.update(site.id, { name }),
+    mutationFn: (name: string) => sitesApi.update(site.id, { name, description: site.description ?? '' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hierarchy', designId] }),
   });
 

@@ -10,6 +10,8 @@ export const sitesApi = {
     api.get<Site>(`/sites/${id}`),
   update: (id: number, data: { name: string; description?: string }) =>
     api.put<Site>(`/sites/${id}`, data),
+  patch: (id: number, data: { name?: string; description?: string }) =>
+    api.patch<Site>(`/sites/${id}`, data),
   delete: (id: number) =>
     api.delete(`/sites/${id}`),
 
