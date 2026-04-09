@@ -222,6 +222,9 @@ func (s *alwaysErrBlockSvc) ListPortConnections(_ int64, _ models.NetworkPlane) 
 }
 func (s *alwaysErrBlockSvc) PlaceSpineDevices(_, _ int64, _ int) error { return nil }
 func (s *alwaysErrBlockSvc) DeleteBlock(_ int64) error                 { return nil }
+func (s *alwaysErrBlockSvc) AssignLeafModel(_ int64, _ int64) (*models.TierAggregationSummary, error) {
+	return nil, nil
+}
 
 // doAssignAggregation issues PUT /api/blocks/1/aggregations/front_end through BlockHandler.
 func doAssignAggregation(t *testing.T, svc handlers.BlockService) *httptest.ResponseRecorder {

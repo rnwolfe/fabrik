@@ -33,6 +33,7 @@ interface BlockDetailPanelProps {
   onSpineCountChange: (value: number) => void;
   onHostLinkSpeedChange: (value: number) => void;
   onAssignSpine: (deviceModelId: number, initialSpineCount: number) => void;
+  onAssignLeaf: (deviceModelId: number) => void;
 }
 
 /**
@@ -158,10 +159,12 @@ export default function BlockDetailPanel({
   onSpineCountChange,
   onHostLinkSpeedChange,
   onAssignSpine,
+  onAssignLeaf,
 }: BlockDetailPanelProps) {
   const frontendAgg = aggs.find((a) => a.plane === 'front_end');
-  const leafModel = frontendAgg
-    ? networkDevices.find((d) => d.id === frontendAgg.device_model_id)
+  const leafModelId = frontendAgg?.device_model_id;
+  const leafModel = leafModelId
+    ? networkDevices.find((d) => d.id === leafModelId)
     : undefined;
 
   const rackCount = racks.length;
@@ -196,6 +199,19 @@ export default function BlockDetailPanel({
         <Badge variant="secondary" className="ml-auto text-[10px]">
           2-stage Clos
         </Badge>
+      </div>
+
+      {/* Leaf model selector */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Leaf Switch</Label>
+        <DeviceModelPicker
+          devices={networkDevices}
+          value={leafModelId}
+          onSelect={(id) => onAssignLeaf(id)}
+          placeholder="Select leaf model…"
+          triggerClassName="h-8 text-xs"
+          role="leaf"
+        />
       </div>
 
       {/* Spine model selector */}
@@ -320,11 +336,20 @@ export default function BlockDetailPanel({
         </div>
       )}
 
-      {!leafModel && !spineModel && (
+      {!leafModel && (
         <div className="rounded-lg border border-dashed border-border p-4 text-center">
           <p className="text-xs text-muted-foreground">
-            Assign a spine switch model to see the topology diagram and capacity metrics.
+            Assign a leaf switch model to enable topology metrics and the capacity diagram.
           </p>
+        </div>
+      )}
+
+      {leafModel && !spineModel && (
+        <div className="grid grid-cols-2 gap-2">
+          <Stat icon={Layers} label="Racks" value="—" />
+          <Stat icon={Server} label="Leaves" value="—" />
+          <Stat icon={Server} label="Spines" value="—" />
+          <Stat icon={Zap} label="Host Ports" value="—" />
         </div>
       )}
     </div>
