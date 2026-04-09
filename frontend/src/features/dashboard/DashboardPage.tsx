@@ -13,6 +13,7 @@ import {
   FolderOpen,
   ArrowRight,
   Database,
+  Check,
 } from 'lucide-react';
 import { designsApi } from '@/api/designs';
 import { useDesign } from '@/contexts/DesignContext';
@@ -24,7 +25,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { DESIGN_TEMPLATES } from './designTemplates';
 import type { Design } from '@/models';
+import { cn } from '@/lib/utils';
 
 const createDesignSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -35,6 +38,8 @@ type CreateDesignForm = z.infer<typeof createDesignSchema>;
 
 export default function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('blank');
+  const [scaffoldToast, setScaffoldToast] = useState<string | null>(null);
   const { setActiveDesignId, activeDesignId } = useDesign();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -46,11 +51,29 @@ export default function DashboardPage() {
 
   const createMutation = useMutation({
     mutationFn: designsApi.create,
-    onSuccess: (design) => {
+    onSuccess: async (design) => {
       queryClient.invalidateQueries({ queryKey: ['designs'] });
       setActiveDesignId(design.id);
       setCreateOpen(false);
       reset();
+
+      const template = DESIGN_TEMPLATES.find((t) => t.id === selectedTemplateId);
+      if (template && template.id !== 'blank') {
+        try {
+          await template.scaffold(design.id);
+          // Invalidate hierarchy queries so the design view shows fresh data
+          queryClient.invalidateQueries({ queryKey: ['hierarchy'] });
+        } catch (err) {
+          // Non-blocking: surface error as toast, still land on design view
+          const msg =
+            err instanceof Error
+              ? err.message
+              : 'Some scaffold steps failed. Your design was created with partial hierarchy.';
+          setScaffoldToast(`Template partially applied: ${msg}`);
+        }
+      }
+
+      navigate('/design');
     },
   });
 
@@ -70,6 +93,14 @@ export default function DashboardPage() {
   const handleOpenDesign = (design: Design) => {
     setActiveDesignId(design.id);
     navigate('/design');
+  };
+
+  const handleDialogClose = (open: boolean) => {
+    if (!open) {
+      setSelectedTemplateId('blank');
+      reset();
+    }
+    setCreateOpen(open);
   };
 
   const formatDate = (iso: string) => {
@@ -210,13 +241,14 @@ export default function DashboardPage() {
       )}
 
       {/* Create Design Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={createOpen} onOpenChange={handleDialogClose}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>New Design</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-5 py-2">
+              {/* Name + description */}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="name">Name</Label>
                 <Input
@@ -234,16 +266,51 @@ export default function DashboardPage() {
                 <Textarea
                   id="description"
                   placeholder="Optional description…"
-                  rows={3}
+                  rows={2}
                   {...register('description')}
                 />
               </div>
+
+              {/* Template picker */}
+              <div className="flex flex-col gap-2">
+                <Label>Start from template</Label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {DESIGN_TEMPLATES.map((template) => {
+                    const isSelected = selectedTemplateId === template.id;
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => setSelectedTemplateId(template.id)}
+                        aria-pressed={isSelected}
+                        className={cn(
+                          'relative flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors',
+                          isSelected
+                            ? 'border-primary bg-primary/5 text-foreground'
+                            : 'border-border bg-card hover:bg-muted/50',
+                        )}
+                      >
+                        {isSelected && (
+                          <span className="absolute right-2 top-2 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <Check className="size-2.5" />
+                          </span>
+                        )}
+                        <span className="text-sm font-medium">{template.name}</span>
+                        <span className="text-xs text-muted-foreground leading-snug">
+                          {template.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <DialogFooter className="mt-2">
+
+            <DialogFooter className="mt-4">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setCreateOpen(false)}
+                onClick={() => handleDialogClose(false)}
               >
                 Cancel
               </Button>
@@ -254,6 +321,24 @@ export default function DashboardPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Scaffold partial-failure toast */}
+      {scaffoldToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-3 shadow-lg text-sm max-w-sm"
+        >
+          <span className="text-muted-foreground">{scaffoldToast}</span>
+          <button
+            onClick={() => setScaffoldToast(null)}
+            className="ml-2 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Dismiss notification"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }
