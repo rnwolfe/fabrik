@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { DeviceModel, DeviceModelType } from '@/models';
+import { errorToCopy } from '@/lib/errorCopy';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -355,7 +356,7 @@ export default function DeviceForm({
 
         {/* Server-side error */}
         {mutationError && (
-          <p className="text-sm text-destructive">{mutationError.message}</p>
+          <p className="text-sm text-destructive">{errorToCopy(mutationError).description}</p>
         )}
       </div>
 
