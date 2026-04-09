@@ -1,6 +1,6 @@
 ---
 title: Switch Radix
-category: Networking
+category: networking
 tags: [radix, switch, clos, port-count, design]
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: Bisection Bandwidth
-category: Networking
+category: networking
 tags: [bisection, bandwidth, clos, throughput, non-blocking]
 ---
 

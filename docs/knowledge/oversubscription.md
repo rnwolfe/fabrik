@@ -1,6 +1,6 @@
 ---
 title: Oversubscription
-category: Networking
+category: networking
 tags: [oversubscription, bandwidth, clos, leaf-spine]
 ---
 

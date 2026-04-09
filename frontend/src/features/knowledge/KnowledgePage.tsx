@@ -24,35 +24,38 @@ function slugify(text: string): string {
     .replace(/[\s_]+/g, '-');
 }
 
-type HeadingProps = React.HTMLAttributes<HTMLHeadingElement> & { children?: React.ReactNode };
-
 /** Extract plain text from ReactMarkdown children for slug generation. */
 function extractText(children: React.ReactNode): string {
   if (typeof children === 'string') return children;
-  if (Array.isArray(children)) {
-    return children.map((c) => (typeof c === 'string' ? c : '')).join('');
+  if (typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(extractText).join('');
+  if (children !== null && typeof children === 'object') {
+    const el = children as React.ReactElement<{ children?: React.ReactNode }>;
+    if ('props' in el && el.props) {
+      return extractText(el.props.children);
+    }
   }
   return '';
 }
 
 /** Custom ReactMarkdown heading renderers that inject `id` attributes from slugified text. */
 const markdownComponents: Components = {
-  h1: ({ children, ...props }: HeadingProps) => (
+  h1: ({ node: _node, children, ...props }) => (
     <h1 id={slugify(extractText(children))} {...props}>{children}</h1>
   ),
-  h2: ({ children, ...props }: HeadingProps) => (
+  h2: ({ node: _node, children, ...props }) => (
     <h2 id={slugify(extractText(children))} {...props}>{children}</h2>
   ),
-  h3: ({ children, ...props }: HeadingProps) => (
+  h3: ({ node: _node, children, ...props }) => (
     <h3 id={slugify(extractText(children))} {...props}>{children}</h3>
   ),
-  h4: ({ children, ...props }: HeadingProps) => (
+  h4: ({ node: _node, children, ...props }) => (
     <h4 id={slugify(extractText(children))} {...props}>{children}</h4>
   ),
-  h5: ({ children, ...props }: HeadingProps) => (
+  h5: ({ node: _node, children, ...props }) => (
     <h5 id={slugify(extractText(children))} {...props}>{children}</h5>
   ),
-  h6: ({ children, ...props }: HeadingProps) => (
+  h6: ({ node: _node, children, ...props }) => (
     <h6 id={slugify(extractText(children))} {...props}>{children}</h6>
   ),
 };

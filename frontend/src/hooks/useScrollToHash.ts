@@ -23,7 +23,8 @@ export function useScrollToHash(contentReady: boolean = true) {
     const timer = setTimeout(() => {
       const el = document.getElementById(id);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
       }
     }, 50);
 
