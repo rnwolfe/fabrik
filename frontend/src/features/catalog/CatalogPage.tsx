@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import {
   Plus,
   Search,
@@ -8,14 +10,17 @@ import {
   Trash2,
   Copy,
   Database,
+  ChevronDown,
 } from 'lucide-react';
-import { catalogApi } from '@/api/catalog';
+import { catalogApi, type DeviceModelRequest } from '@/api/catalog';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -23,12 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -38,69 +37,46 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { DeviceModel, DeviceModelType } from '@/models';
-import DeviceForm, { deviceTypeLabels } from './DeviceForm';
-import type { DeviceFormValues } from './DeviceForm';
-import { suggestedRoles, roleBadgeLabel, roleBadgeVariant, type Role } from '@/lib/deviceRoles';
-import { cn } from '@/lib/utils';
 
-/** Parse a comma-separated `speeds` query param into a Set of numbers. */
-export function parseSpeedsParam(param: string | null): Set<number> {
-  if (!param) return new Set();
-  return new Set(param.split(',').map(Number).filter((n) => !isNaN(n) && n > 0));
-}
+const numField = (min = 0) => z.preprocess((v) => (v === '' || v == null ? 0 : Number(v)), z.number().min(min));
 
-/** Collect distinct port speeds across all devices, sorted ascending. */
-export function collectSpeedOptions(devices: DeviceModel[]): number[] {
-  const speeds = new Set<number>();
-  for (const d of devices) {
-    for (const pg of d.port_groups ?? []) {
-      speeds.add(pg.speed_gbps);
-    }
-  }
-  return Array.from(speeds).sort((a, b) => a - b);
-}
+const portGroupSchema = z.object({
+  count: numField(1),
+  speed_gbps: numField(1),
+  label: z.string().default(''),
+});
 
-/** Returns true if the device matches the speed filter (OR within speeds). */
-export function deviceMatchesSpeed(device: DeviceModel, selectedSpeeds: Set<number>): boolean {
-  if (selectedSpeeds.size === 0) return true;
-  return (device.port_groups ?? []).some((pg) => selectedSpeeds.has(pg.speed_gbps));
-}
+const deviceSchema = z.object({
+  vendor: z.string().min(1, 'Vendor required'),
+  model: z.string().min(1, 'Model required'),
+  device_model_type: z.enum(['network', 'server', 'storage', 'other']),
+  port_count: numField(0),
+  port_groups: z.array(portGroupSchema).default([]),
+  height_u: numField(1),
+  power_watts_idle: numField(0),
+  power_watts_typical: numField(0),
+  power_watts_max: numField(0),
+  cpu_sockets: numField(0),
+  cores_per_socket: numField(0),
+  ram_gb: numField(0),
+  storage_tb: numField(0),
+  gpu_count: numField(0),
+  description: z.string().default(''),
+});
+
+type DeviceForm = z.infer<typeof deviceSchema>;
+
+const deviceTypeLabels: Record<DeviceModelType, string> = {
+  network: 'Network',
+  server: 'Server',
+  storage: 'Storage',
+  other: 'Other',
+};
 
 export default function CatalogPage() {
   const [search, setSearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
-
-  const [searchParams, setSearchParams] = useSearchParams();
-  const speedsParam = searchParams.get('speeds');
-  const selectedSpeeds = useMemo(() => parseSpeedsParam(speedsParam), [speedsParam]);
-
-  const toggleSpeed = (speed: number) => {
-    const next = new Set(selectedSpeeds);
-    if (next.has(speed)) {
-      next.delete(speed);
-    } else {
-      next.add(speed);
-    }
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next.size === 0) {
-        params.delete('speeds');
-      } else {
-        params.set('speeds', Array.from(next).sort((a, b) => a - b).join(','));
-      }
-      return params;
-    });
-  };
-
-  const clearSpeeds = () => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      params.delete('speeds');
-      return params;
-    });
-  };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDevice, setEditDevice] = useState<DeviceModel | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DeviceModel | null>(null);
@@ -113,53 +89,88 @@ export default function CatalogPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: catalogApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      closeDialog();
-    },
+    mutationFn: (data: DeviceModelRequest) => catalogApi.create(data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['catalog'] }); closeDialog(); },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: DeviceFormValues }) =>
+    mutationFn: ({ id, data }: { id: number; data: DeviceModelRequest }) =>
       catalogApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      closeDialog();
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['catalog'] }); closeDialog(); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: catalogApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      setDeleteConfirm(null);
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['catalog'] }); setDeleteConfirm(null); },
   });
 
   const duplicateMutation = useMutation({
     mutationFn: catalogApi.duplicate,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['catalog'] }); },
   });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    control,
+    formState: { errors },
+  } = useForm<DeviceForm>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(deviceSchema) as any,
+    defaultValues: { device_model_type: 'network', height_u: 1, port_count: 0, port_groups: [] },
+  });
+
+  const { fields: portGroupFields, append: appendPortGroup, remove: removePortGroup } = useFieldArray({
+    control,
+    name: 'port_groups',
+  });
+
+  const watchedType = watch('device_model_type');
+  const isNetworkType = watchedType === 'network';
+  const isComputeType = watchedType === 'server' || watchedType === 'storage';
 
   const openCreate = () => {
     setEditDevice(null);
+    reset({ device_model_type: 'network', height_u: 1, port_count: 0, port_groups: [] });
     setDialogOpen(true);
   };
 
   const openEdit = (device: DeviceModel) => {
     setEditDevice(device);
+    reset({
+      vendor: device.vendor,
+      model: device.model,
+      device_model_type: device.device_model_type,
+      port_count: device.port_count,
+      port_groups: (device.port_groups ?? []).map((pg) => ({
+        count: pg.count,
+        speed_gbps: pg.speed_gbps,
+        label: pg.label,
+      })),
+      height_u: device.height_u,
+      power_watts_idle: device.power_watts_idle,
+      power_watts_typical: device.power_watts_typical,
+      power_watts_max: device.power_watts_max,
+      cpu_sockets: device.cpu_sockets,
+      cores_per_socket: device.cores_per_socket,
+      ram_gb: device.ram_gb,
+      storage_tb: device.storage_tb,
+      gpu_count: device.gpu_count,
+      description: device.description,
+    });
     setDialogOpen(true);
   };
 
   const closeDialog = () => {
     setDialogOpen(false);
     setEditDevice(null);
+    reset();
   };
 
-  const handleFormSubmit = (data: DeviceFormValues) => {
+  const onSubmit = (data: DeviceForm) => {
     if (editDevice) {
       updateMutation.mutate({ id: editDevice.id, data });
     } else {
@@ -177,8 +188,6 @@ export default function CatalogPage() {
     [activeDevices]
   );
 
-  const speedOptions = useMemo(() => collectSpeedOptions(activeDevices), [activeDevices]);
-
   const filtered = useMemo(() => {
     return activeDevices.filter((d) => {
       const matchSearch =
@@ -187,22 +196,12 @@ export default function CatalogPage() {
         d.model.toLowerCase().includes(search.toLowerCase());
       const matchVendor = vendorFilter === 'all' || d.vendor === vendorFilter;
       const matchType = typeFilter === 'all' || d.device_model_type === typeFilter;
-      let matchRole = true;
-      if (roleFilter !== 'all') {
-        const roles = suggestedRoles(d);
-        if (roleFilter === 'none') {
-          matchRole = roles.length === 0;
-        } else {
-          matchRole = roles.includes(roleFilter as Role);
-        }
-      }
-      return matchSearch && matchVendor && matchType && matchRole && deviceMatchesSpeed(d, selectedSpeeds);
+      return matchSearch && matchVendor && matchType;
     });
-  }, [activeDevices, search, vendorFilter, typeFilter, roleFilter, selectedSpeeds]);
+  }, [activeDevices, search, vendorFilter, typeFilter]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
   const mutationError = createMutation.error ?? updateMutation.error;
-  const hasActiveFilters = !!(search || vendorFilter !== 'all' || typeFilter !== 'all' || roleFilter !== 'all' || selectedSpeeds.size > 0);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -253,62 +252,6 @@ export default function CatalogPage() {
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v ?? 'all')}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="All roles" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All roles</SelectItem>
-            <SelectItem value="leaf">Leaf</SelectItem>
-            <SelectItem value="spine">Spine</SelectItem>
-            <SelectItem value="super-spine">Super-spine</SelectItem>
-            <SelectItem value="none">No role</SelectItem>
-          </SelectContent>
-        </Select>
-        {speedOptions.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="inline-flex h-9 w-[140px] items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm font-normal ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              aria-label="Port speed filter"
-            >
-              {selectedSpeeds.size === 0
-                ? 'All speeds'
-                : selectedSpeeds.size === 1
-                ? `${Array.from(selectedSpeeds)[0]}G`
-                : `${selectedSpeeds.size} speeds`}
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[140px]">
-              {speedOptions.map((speed) => (
-                <DropdownMenuCheckboxItem
-                  key={speed}
-                  checked={selectedSpeeds.has(speed)}
-                  onCheckedChange={() => toggleSpeed(speed)}
-                >
-                  {speed}G
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs"
-            onClick={() => {
-              setSearch('');
-              setVendorFilter('all');
-              setTypeFilter('all');
-              setRoleFilter('all');
-              clearSpeeds();
-            }}
-          >
-            Clear filters
-          </Button>
-        )}
         {filtered.length !== activeDevices.length && (
           <span className="text-xs text-muted-foreground">
             {filtered.length} of {activeDevices.length} devices
@@ -325,10 +268,14 @@ export default function CatalogPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Database}
-          title={hasActiveFilters ? 'No matching devices' : 'No devices in catalog'}
-          description={hasActiveFilters ? 'Try adjusting your filters' : 'Add your first device model to get started'}
+          title={search || vendorFilter !== 'all' || typeFilter !== 'all' ? 'No matching devices' : 'No devices in catalog'}
+          description={
+            search || vendorFilter !== 'all' || typeFilter !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Add your first device model to get started'
+          }
           action={
-            !hasActiveFilters ? (
+            !search && vendorFilter === 'all' && typeFilter === 'all' ? (
               <Button onClick={openCreate}>
                 <Plus className="size-4" />
                 Add device
@@ -344,7 +291,6 @@ export default function CatalogPage() {
                 <TableHead>Model</TableHead>
                 <TableHead>Vendor</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Roles</TableHead>
                 <TableHead className="text-right">Ports</TableHead>
                 <TableHead className="text-right">Height (U)</TableHead>
                 <TableHead className="text-right">Power (W typ)</TableHead>
@@ -372,21 +318,6 @@ export default function CatalogPage() {
                     <Badge variant="outline" className="text-[10px]">
                       {deviceTypeLabels[device.device_model_type]}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {suggestedRoles(device).map((role) => (
-                        <span
-                          key={role}
-                          className={cn(
-                            'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
-                            roleBadgeVariant[role],
-                          )}
-                        >
-                          {roleBadgeLabel[role]}
-                        </span>
-                      ))}
-                    </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {device.port_groups && device.port_groups.length > 0 ? (
@@ -440,13 +371,168 @@ export default function CatalogPage() {
           <DialogHeader>
             <DialogTitle>{editDevice ? 'Edit Device' : 'Add Device'}</DialogTitle>
           </DialogHeader>
-          <DeviceForm
-            editDevice={editDevice}
-            onSubmit={handleFormSubmit}
-            onCancel={closeDialog}
-            isPending={isPending}
-            mutationError={mutationError}
-          />
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <div className="grid gap-4 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="vendor">Vendor</Label>
+                  <Input id="vendor" placeholder="e.g. Cisco" {...register('vendor')} aria-invalid={!!errors.vendor} />
+                  {errors.vendor && <p className="text-xs text-destructive">{errors.vendor.message}</p>}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="model">Model</Label>
+                  <Input id="model" placeholder="e.g. Nexus 9300" {...register('model')} aria-invalid={!!errors.model} />
+                  {errors.model && <p className="text-xs text-destructive">{errors.model.message}</p>}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Device Type</Label>
+                <Select
+                  value={watchedType}
+                  onValueChange={(v) => setValue('device_model_type', v as DeviceModelType)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(value: string) => deviceTypeLabels[value as DeviceModelType] ?? value}
+                    </SelectValue>
+                    <ChevronDown className="size-4" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="network">Network</SelectItem>
+                    <SelectItem value="server">Server</SelectItem>
+                    <SelectItem value="storage">Storage</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="port_count">Port Count</Label>
+                  <Input id="port_count" type="number" min={0} {...register('port_count')} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="height_u">Height (U)</Label>
+                  <Input id="height_u" type="number" min={1} {...register('height_u')} />
+                </div>
+              </div>
+
+              {isNetworkType && (
+                <div className="space-y-3 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Port Groups
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Physical port sets available on this device
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendPortGroup({ count: 0, speed_gbps: 0, label: '' })}
+                    >
+                      <Plus className="size-3" />
+                      Add Group
+                    </Button>
+                  </div>
+                  {portGroupFields.map((field, index) => (
+                    <div key={field.id} className="grid grid-cols-[1fr_1fr_1.5fr_auto] gap-2 items-end">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[10px]">Count</Label>
+                        <Input type="number" min={1} {...register(`port_groups.${index}.count`)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[10px]">Speed (Gbps)</Label>
+                        <Input type="number" min={1} {...register(`port_groups.${index}.speed_gbps`)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[10px]">Label</Label>
+                        <Input placeholder="e.g. 25GbE SFP28" {...register(`port_groups.${index}.label`)} />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => removePortGroup(index)}
+                      >
+                        <Trash2 className="size-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  {portGroupFields.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      No port groups defined. Add groups to enable speed-based oversubscription.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="power_watts_idle">Power Idle (W)</Label>
+                  <Input id="power_watts_idle" type="number" min={0} {...register('power_watts_idle')} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="power_watts_typical">Power Typical (W)</Label>
+                  <Input id="power_watts_typical" type="number" min={0} {...register('power_watts_typical')} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="power_watts_max">Power Max (W)</Label>
+                  <Input id="power_watts_max" type="number" min={0} {...register('power_watts_max')} />
+                </div>
+              </div>
+
+              {isComputeType && (
+                <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                  <div className="col-span-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Compute Specs
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cpu_sockets">CPU Sockets</Label>
+                    <Input id="cpu_sockets" type="number" min={0} {...register('cpu_sockets')} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cores_per_socket">Cores / Socket</Label>
+                    <Input id="cores_per_socket" type="number" min={0} {...register('cores_per_socket')} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="ram_gb">RAM (GB)</Label>
+                    <Input id="ram_gb" type="number" min={0} {...register('ram_gb')} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="storage_tb">Storage (TB)</Label>
+                    <Input id="storage_tb" type="number" min={0} step="0.1" {...register('storage_tb')} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="gpu_count">GPU Count</Label>
+                    <Input id="gpu_count" type="number" min={0} {...register('gpu_count')} />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="description">Description</Label>
+                <Textarea id="description" rows={2} placeholder="Optional…" {...register('description')} />
+              </div>
+
+              {mutationError && (
+                <p className="text-sm text-destructive">{mutationError.message}</p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeDialog}>Cancel</Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? 'Saving…' : editDevice ? 'Save Changes' : 'Add Device'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -459,7 +545,7 @@ export default function CatalogPage() {
           <p className="text-sm text-muted-foreground">
             This will archive <strong>{deleteConfirm?.vendor} {deleteConfirm?.model}</strong>. It will no longer appear in the catalog.
           </p>
-          <div className="flex justify-end gap-2 pt-2">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
             <Button
               variant="destructive"
@@ -468,7 +554,7 @@ export default function CatalogPage() {
             >
               {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

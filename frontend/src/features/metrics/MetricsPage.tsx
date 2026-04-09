@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
+import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
 import {
   BarChart3,
   AlertTriangle,
@@ -32,7 +32,18 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { FabricTier } from '@/models';
-import { oversubColor, utilizationBgColor, powerUtilizationColor, powerUtilizationBgColor } from './colors';
+
+function oversubColor(ratio: number) {
+  if (ratio <= 2) return 'text-green-600 dark:text-green-400';
+  if (ratio <= 4) return 'text-amber-600 dark:text-amber-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
+function oversubBgColor(ratio: number) {
+  if (ratio <= 2) return 'bg-green-500';
+  if (ratio <= 4) return 'bg-amber-500';
+  return 'bg-red-500';
+}
 
 export default function MetricsPage() {
   const { activeDesignId, setActiveDesignId } = useDesign();
@@ -125,7 +136,13 @@ export default function MetricsPage() {
               icon={Zap}
               label="Power Utilization"
               value={`${metrics.power.utilization_pct.toFixed(1)}%`}
-              valueClass={powerUtilizationColor(metrics.power.utilization_pct)}
+              valueClass={
+                metrics.power.utilization_pct > 90
+                  ? 'text-red-600 dark:text-red-400'
+                  : metrics.power.utilization_pct > 75
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : undefined
+              }
             />
           </div>
 
@@ -236,17 +253,24 @@ export default function MetricsPage() {
                   </div>
                   <div className="ml-auto">
                     <p className="text-xs text-muted-foreground">Utilization</p>
-                    <p className={`font-mono font-medium ${powerUtilizationColor(metrics.power.utilization_pct)}`}>
+                    <p className={`font-mono font-medium ${
+                      metrics.power.utilization_pct > 90 ? 'text-red-600 dark:text-red-400' :
+                      metrics.power.utilization_pct > 75 ? 'text-amber-600 dark:text-amber-400' : ''
+                    }`}>
                       {metrics.power.utilization_pct.toFixed(1)}%
                     </p>
                   </div>
                 </div>
-                <ProgressTrack className="h-2">
-                  <ProgressIndicator
-                    className={powerUtilizationBgColor(metrics.power.utilization_pct)}
-                    style={{ width: `${Math.min(metrics.power.utilization_pct, 100)}%` }}
-                  />
-                </ProgressTrack>
+                <Progress value={Math.min(metrics.power.utilization_pct, 100)}>
+                  <ProgressTrack className="h-2">
+                    <ProgressIndicator
+                      className={
+                        metrics.power.utilization_pct > 90 ? 'bg-red-500' :
+                        metrics.power.utilization_pct > 75 ? 'bg-amber-500' : 'bg-green-500'
+                      }
+                    />
+                  </ProgressTrack>
+                </Progress>
               </CardContent>
             </Card>
           </section>
@@ -294,12 +318,13 @@ export default function MetricsPage() {
                           <TableCell className="text-right font-mono text-sm">{p.total_ports.toLocaleString()}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <ProgressTrack className="h-1.5 flex-1">
-                                <ProgressIndicator
-                                  className={utilizationBgColor(utilPct)}
-                                  style={{ width: `${utilPct}%` }}
-                                />
-                              </ProgressTrack>
+                              <Progress value={utilPct} className="flex-1">
+                                <ProgressTrack className="h-1.5 w-full">
+                                  <ProgressIndicator
+                                    className={oversubBgColor(utilPct > 80 ? 5 : utilPct > 60 ? 3 : 1)}
+                                  />
+                                </ProgressTrack>
+                              </Progress>
                               <span className="w-10 text-right text-xs text-muted-foreground">
                                 {utilPct.toFixed(0)}%
                               </span>

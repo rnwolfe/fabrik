@@ -34,7 +34,7 @@ func (h *MetricsHandler) GetDesignMetrics(w http.ResponseWriter, r *http.Request
 	m, err := h.svc.GetDesignMetrics(designID)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "design not found")
 			return
 		}
 		slog.Error("get design metrics", "err", err, "designID", designID)

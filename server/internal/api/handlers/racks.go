@@ -70,7 +70,7 @@ func (h *RackHandler) CreateRackType(w http.ResponseWriter, r *http.Request) {
 	rt, err := h.svc.CreateRackType(req.Name, req.Description, req.HeightU, req.PowerCapacityW, req.PowerOversubPctWarn, req.PowerOversubPctMax)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusUnprocessableEntity, err)
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		slog.Error("create rack type", "err", err)
@@ -103,7 +103,7 @@ func (h *RackHandler) GetRackType(w http.ResponseWriter, r *http.Request) {
 	rt, err := h.svc.GetRackType(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "rack type not found")
 			return
 		}
 		slog.Error("get rack type", "err", err, "rackTypeID", id)
@@ -133,11 +133,11 @@ func (h *RackHandler) UpdateRackType(w http.ResponseWriter, r *http.Request) {
 	rt, err := h.svc.UpdateRackType(id, req.Name, req.Description, req.HeightU, req.PowerCapacityW, req.PowerOversubPctWarn, req.PowerOversubPctMax)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "rack type not found")
 			return
 		}
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusUnprocessableEntity, err)
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		slog.Error("update rack type", "err", err, "rackTypeID", id)
@@ -155,11 +155,11 @@ func (h *RackHandler) DeleteRackType(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.svc.DeleteRackType(id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "rack type not found")
 			return
 		}
 		if errors.Is(err, models.ErrConflict) {
-			writeDomainError(w, http.StatusConflict, err)
+			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
 		slog.Error("delete rack type", "err", err, "rackTypeID", id)
@@ -201,11 +201,11 @@ func (h *RackHandler) CreateRack(w http.ResponseWriter, r *http.Request) {
 	rack, err := h.svc.CreateRack(req.Name, req.Description, req.BlockID, req.RackTypeID, req.HeightU, req.PowerCapacityW, role)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusUnprocessableEntity, err)
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		slog.Error("create rack", "err", err)
@@ -248,7 +248,7 @@ func (h *RackHandler) GetRack(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.svc.GetRackSummary(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "rack not found")
 			return
 		}
 		slog.Error("get rack", "err", err, "rackID", id)
@@ -284,11 +284,11 @@ func (h *RackHandler) UpdateRack(w http.ResponseWriter, r *http.Request) {
 	rack, err := h.svc.UpdateRack(id, req.Name, req.Description, req.BlockID)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "rack not found")
 			return
 		}
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusUnprocessableEntity, err)
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		slog.Error("update rack", "err", err, "rackID", id)
@@ -306,7 +306,7 @@ func (h *RackHandler) DeleteRack(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.svc.DeleteRack(id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "rack not found")
 			return
 		}
 		slog.Error("delete rack", "err", err, "rackID", id)
@@ -347,15 +347,15 @@ func (h *RackHandler) PlaceDevice(w http.ResponseWriter, r *http.Request) {
 	result, err := h.svc.PlaceDevice(rackID, req.DeviceModelID, req.Name, req.Description, req.Role, req.Position)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrRUOverflow) || errors.Is(err, models.ErrPositionOverlap) || errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusBadRequest, err)
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrConflict) {
-			writeDomainError(w, http.StatusConflict, err)
+			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
 		slog.Error("place device", "err", err, "rackID", rackID)
@@ -393,11 +393,11 @@ func (h *RackHandler) MoveDeviceInRack(w http.ResponseWriter, r *http.Request) {
 	result, err := h.svc.MoveDeviceInRack(rackID, deviceID, req.Position)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrRUOverflow) || errors.Is(err, models.ErrPositionOverlap) || errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusBadRequest, err)
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		slog.Error("move device in rack", "err", err, "rackID", rackID, "deviceID", deviceID)
@@ -436,11 +436,11 @@ func (h *RackHandler) MoveDeviceCrossRack(w http.ResponseWriter, r *http.Request
 	result, err := h.svc.MoveDeviceCrossRack(rackID, deviceID, req.DestRackID, req.Position)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrRUOverflow) || errors.Is(err, models.ErrPositionOverlap) || errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusBadRequest, err)
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		slog.Error("move device cross-rack", "err", err, "rackID", rackID, "deviceID", deviceID)
@@ -463,7 +463,7 @@ func (h *RackHandler) RemoveDevice(w http.ResponseWriter, r *http.Request) {
 	compact := r.URL.Query().Get("compact") == "true"
 	if err := h.svc.RemoveDevice(rackID, deviceID, compact); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		slog.Error("remove device", "err", err, "rackID", rackID, "deviceID", deviceID)
@@ -501,15 +501,15 @@ func (h *RackHandler) PlaceServerDevices(w http.ResponseWriter, r *http.Request)
 	}
 	if err := h.svc.PlaceServerDevices(rackID, req.DeviceModelID, req.Count); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusUnprocessableEntity, err)
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrRUOverflow) || errors.Is(err, models.ErrPositionOverlap) {
-			writeDomainError(w, http.StatusBadRequest, err)
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		slog.Error("place server devices", "err", err, "rackID", rackID)

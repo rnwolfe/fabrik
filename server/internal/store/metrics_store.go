@@ -114,6 +114,23 @@ func (s *MetricsStore) QueryDesignCapacity(designID int64) (*models.CapacitySumm
 	return c, nil
 }
 
+// QueryDesignDeviceCounts returns the count of server devices and switch devices
+// (leaf, spine, super_spine, management_tor, management_agg) placed in the design's racks.
+func (s *MetricsStore) QueryDesignDeviceCounts(designID int64) (serverCount int, switchCount int, err error) {
+	const q = `
+		SELECT
+			COALESCE(SUM(CASE WHEN d.role = 'server' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN d.role IN ('leaf','spine','super_spine','management_tor','management_agg') THEN 1 ELSE 0 END), 0)
+		FROM devices d
+		JOIN racks r ON d.rack_id = r.id
+		JOIN blocks b ON r.block_id = b.id
+		JOIN super_blocks sb ON b.super_block_id = sb.id
+		JOIN sites s ON sb.site_id = s.id
+		WHERE s.design_id = ?`
+	err = s.db.QueryRow(q, designID).Scan(&serverCount, &switchCount)
+	return
+}
+
 // QueryDesignPowerAndRacks returns the total device power draw (typical watts)
 // and the total rack power capacity (watts) for all racks belonging to the design.
 func (s *MetricsStore) QueryDesignPowerAndRacks(designID int64) (totalDrawW int, totalRackCapacityW int, err error) {

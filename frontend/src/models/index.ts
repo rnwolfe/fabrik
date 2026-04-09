@@ -86,6 +86,11 @@ export interface TopologyPlan {
   leaf_uplinks: number;
   total_switches: number;
   total_host_ports: number;
+  bandwidth_oversubscription?: number;
+  host_link_speed_gbps?: number;
+  uplink_speed_gbps?: number;
+  downlink_speed_gbps?: number;
+  bisection_bandwidth_gbps?: number;
 }
 
 export interface FabricMetrics {
@@ -144,6 +149,7 @@ export interface TierAggregationSummary {
   plane: NetworkPlane;
   device_model_id: number;
   spine_count: number;
+  host_link_speed_gbps: number;
   total_ports: number;
   allocated_ports: number;
   available_ports: number;

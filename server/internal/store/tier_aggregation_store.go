@@ -23,17 +23,18 @@ func NewTierAggregationStore(db *sql.DB) *TierAggregationStore {
 // SetAggregation upserts a TierAggregation for (scope_type, scope_id, plane).
 func (s *TierAggregationStore) SetAggregation(agg *models.TierAggregation) (*models.TierAggregation, error) {
 	const q = `
-		INSERT INTO tier_aggregations (scope_type, scope_id, plane, device_model_id, spine_count)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO tier_aggregations (scope_type, scope_id, plane, device_model_id, spine_count, host_link_speed_gbps)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(scope_type, scope_id, plane) DO UPDATE SET
 			device_model_id = excluded.device_model_id,
 			spine_count = excluded.spine_count,
+			host_link_speed_gbps = excluded.host_link_speed_gbps,
 			updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		RETURNING id, scope_type, scope_id, plane, device_model_id, spine_count, created_at, updated_at`
+		RETURNING id, scope_type, scope_id, plane, device_model_id, spine_count, host_link_speed_gbps, created_at, updated_at`
 
 	out := &models.TierAggregation{}
-	err := s.db.QueryRow(q, agg.ScopeType, agg.ScopeID, agg.Plane, agg.DeviceModelID, agg.SpineCount).
-		Scan(&out.ID, &out.ScopeType, &out.ScopeID, &out.Plane, &out.DeviceModelID, &out.SpineCount, &out.CreatedAt, &out.UpdatedAt)
+	err := s.db.QueryRow(q, agg.ScopeType, agg.ScopeID, agg.Plane, agg.DeviceModelID, agg.SpineCount, agg.HostLinkSpeedGbps).
+		Scan(&out.ID, &out.ScopeType, &out.ScopeID, &out.Plane, &out.DeviceModelID, &out.SpineCount, &out.HostLinkSpeedGbps, &out.CreatedAt, &out.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("set aggregation: %w", err)
 	}
@@ -43,12 +44,12 @@ func (s *TierAggregationStore) SetAggregation(agg *models.TierAggregation) (*mod
 // GetAggregation returns the TierAggregation for (scopeType, scopeID, plane), or models.ErrNotFound.
 func (s *TierAggregationStore) GetAggregation(scopeType models.AggregationScope, scopeID int64, plane models.NetworkPlane) (*models.TierAggregation, error) {
 	const q = `
-		SELECT id, scope_type, scope_id, plane, device_model_id, spine_count, created_at, updated_at
+		SELECT id, scope_type, scope_id, plane, device_model_id, spine_count, host_link_speed_gbps, created_at, updated_at
 		FROM tier_aggregations WHERE scope_type = ? AND scope_id = ? AND plane = ?`
 
 	out := &models.TierAggregation{}
 	err := s.db.QueryRow(q, scopeType, scopeID, plane).
-		Scan(&out.ID, &out.ScopeType, &out.ScopeID, &out.Plane, &out.DeviceModelID, &out.SpineCount, &out.CreatedAt, &out.UpdatedAt)
+		Scan(&out.ID, &out.ScopeType, &out.ScopeID, &out.Plane, &out.DeviceModelID, &out.SpineCount, &out.HostLinkSpeedGbps, &out.CreatedAt, &out.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrNotFound
 	}
@@ -61,7 +62,7 @@ func (s *TierAggregationStore) GetAggregation(scopeType models.AggregationScope,
 // ListAggregations returns all TierAggregation records for a given scope.
 func (s *TierAggregationStore) ListAggregations(scopeType models.AggregationScope, scopeID int64) ([]*models.TierAggregation, error) {
 	const q = `
-		SELECT id, scope_type, scope_id, plane, device_model_id, spine_count, created_at, updated_at
+		SELECT id, scope_type, scope_id, plane, device_model_id, spine_count, host_link_speed_gbps, created_at, updated_at
 		FROM tier_aggregations WHERE scope_type = ? AND scope_id = ? ORDER BY plane`
 
 	rows, err := s.db.Query(q, scopeType, scopeID)
@@ -73,7 +74,7 @@ func (s *TierAggregationStore) ListAggregations(scopeType models.AggregationScop
 	var out []*models.TierAggregation
 	for rows.Next() {
 		a := &models.TierAggregation{}
-		if err := rows.Scan(&a.ID, &a.ScopeType, &a.ScopeID, &a.Plane, &a.DeviceModelID, &a.SpineCount, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.ScopeType, &a.ScopeID, &a.Plane, &a.DeviceModelID, &a.SpineCount, &a.HostLinkSpeedGbps, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan aggregation: %w", err)
 		}
 		out = append(out, a)

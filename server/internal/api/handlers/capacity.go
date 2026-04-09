@@ -137,7 +137,7 @@ func parseQueryID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 func handleCapacityErr(w http.ResponseWriter, err error, kind string, id int64) {
 	if errors.Is(err, models.ErrNotFound) {
-		writeDomainError(w, http.StatusNotFound, err)
+		writeError(w, http.StatusNotFound, kind+" not found")
 		return
 	}
 	slog.Error("compute capacity", "kind", kind, "id", id, "err", err)
