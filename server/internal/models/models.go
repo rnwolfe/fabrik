@@ -73,6 +73,23 @@ type Rack struct {
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
+// RackWarningKind enumerates the category of a rack warning.
+type RackWarningKind string
+
+const (
+	RackWarningKindPower RackWarningKind = "power"
+	RackWarningKindRU    RackWarningKind = "ru"
+	RackWarningKindPort  RackWarningKind = "port"
+)
+
+// RackWarning is a structured warning entry for a rack, describing a single violation.
+type RackWarning struct {
+	Kind   RackWarningKind `json:"kind"`
+	Detail string          `json:"detail"`
+	DeltaW *int            `json:"delta_w,omitempty"`
+	DeltaU *int            `json:"delta_u,omitempty"`
+}
+
 // RackSummary is a rack with computed usage metrics and device list.
 type RackSummary struct {
 	Rack
@@ -82,6 +99,8 @@ type RackSummary struct {
 	UsedWattsTypical   int              `json:"used_watts_typical"`
 	UsedWattsMax       int              `json:"used_watts_max"`
 	Devices            []*DeviceSummary `json:"devices"`
+	Warnings           []RackWarning    `json:"warnings,omitempty"`
+	// Deprecated: use Warnings instead. Kept for one release for API stability.
 	Warning            string           `json:"warning,omitempty"`
 }
 
