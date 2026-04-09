@@ -48,7 +48,7 @@ func (h *FabricHandler) Create(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.CreateFabric(req)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
 		slog.Error("create fabric", "err", err)
@@ -83,7 +83,7 @@ func (h *FabricHandler) Get(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.GetFabric(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "fabric not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("get fabric", "err", err, "fabricID", id)
@@ -116,11 +116,11 @@ func (h *FabricHandler) Update(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.UpdateFabric(id, req)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "fabric not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
 		slog.Error("update fabric", "err", err, "fabricID", id)
@@ -140,7 +140,7 @@ func (h *FabricHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.DeleteFabric(id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "fabric not found")
+			writeDomainError(w, http.StatusNotFound, err)
 			return
 		}
 		slog.Error("delete fabric", "err", err, "fabricID", id)
@@ -164,7 +164,7 @@ func (h *FabricHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	plan, err := h.svc.PreviewTopology(req)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeDomainError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
 		slog.Error("preview topology", "err", err)

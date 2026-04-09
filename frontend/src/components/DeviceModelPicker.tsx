@@ -15,7 +15,16 @@ import {
 import type { DeviceModel } from '@/models';
 import CreateDeviceSheet from './CreateDeviceSheet';
 import { suggestedRoles, roleBadgeLabel, roleBadgeVariant, type Role } from '@/lib/deviceRoles';
-import { portGroupSummary } from '@/lib/portGroups';
+
+function portGroupSummary(dm: DeviceModel): string {
+  const groups = dm.port_groups;
+  if (!groups || groups.length === 0) {
+    return dm.port_count > 0 ? `${dm.port_count} ports` : '';
+  }
+  return groups
+    .map((g) => `${g.count}×${g.speed_gbps}G`)
+    .join(' + ');
+}
 
 // ── Nested popover guard ──────────────────────────────────────────────────────
 // When a DeviceModelPicker popover is open inside a Dialog, clicks on the
@@ -193,8 +202,7 @@ export default function DeviceModelPicker({
                               </div>
                             </div>
                             <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                              {portGroupSummary(dm) !== '—' && <span>{portGroupSummary(dm)}</span>}
-                              {portGroupSummary(dm) === '—' && dm.port_count > 0 && <span>{dm.port_count} ports</span>}
+                              <span>{portGroupSummary(dm)}</span>
                               {dm.power_watts_typical > 0 && (
                                 <>
                                   <span className="text-border">·</span>
