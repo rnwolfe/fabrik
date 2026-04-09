@@ -27,6 +27,9 @@ type BlockService interface {
 	AssignSuperBlockAggregation(superBlockID int64, plane models.NetworkPlane, deviceModelID int64, spineCount int, hostLinkSpeedGbps int) (*models.TierAggregationSummary, error)
 	GetSuperBlockAggregationSummary(superBlockID int64, plane models.NetworkPlane) (*models.TierAggregationSummary, error)
 
+	// Leaf model assignment (PATCH)
+	AssignLeafModel(blockID int64, leafModelID int64) (*models.TierAggregationSummary, error)
+
 	// Rack placement
 	AddRackToBlock(rackID int64, blockID *int64, superBlockID int64) (*models.AddRackToBlockResult, error)
 	RemoveRackFromBlock(rackID int64) error
@@ -448,6 +451,57 @@ func (h *BlockHandler) PlaceSpineDevices(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// patchBlockRequest is the request body for PatchBlock.
+type patchBlockRequest struct {
+	LeafModelID *int64 `json:"leaf_model_id"`
+}
+
+// PatchBlock handles PATCH /api/blocks/{id}.
+// Currently supports updating leaf_model_id (assigns the front_end aggregation).
+func (h *BlockHandler) PatchBlock(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req patchBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.LeafModelID == nil {
+		writeError(w, http.StatusBadRequest, "leaf_model_id is required")
+		return
+	}
+
+	summary, err := h.svc.AssignLeafModel(id, *req.LeafModelID)
+	if err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, models.ErrConstraintViolation) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if errors.Is(err, models.ErrAggModelDownsize) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		slog.Error("patch block leaf model", "err", err, "blockID", id)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 // DeleteBlock handles DELETE /api/blocks/{id}.

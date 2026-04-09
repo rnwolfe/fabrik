@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -238,6 +239,30 @@ func (s *BlockService) CreateBlock(superBlockID int64, name, description string,
 		"blockID", b.ID, "racks", len(racks), "leafModel", leafModel.Model,
 		"spineModel", spineModel)
 	return result, nil
+}
+
+// AssignLeafModel assigns leafModelID as the front_end aggregation for blockID.
+// This is the PATCH /api/blocks/{id} leaf_model_id path.
+// It validates that the device model exists and delegates to AssignAggregation.
+func (s *BlockService) AssignLeafModel(blockID int64, leafModelID int64) (*models.TierAggregationSummary, error) {
+	if _, err := s.repo.GetBlock(blockID); err != nil {
+		return nil, fmt.Errorf("get block %d: %w", blockID, err)
+	}
+	if _, err := s.repo.GetDeviceModel(leafModelID); err != nil {
+		if errors.Is(err, models.ErrNotFound) {
+			return nil, fmt.Errorf("%w: leaf_model_id %d not found", models.ErrConstraintViolation, leafModelID)
+		}
+		return nil, fmt.Errorf("get device model %d: %w", leafModelID, err)
+	}
+	// Preserve existing spine_count if an agg already exists.
+	spineCount := 0
+	existing, err := s.repo.GetAggregation(models.ScopeBlock, blockID, models.PlaneFrontEnd)
+	if err == nil {
+		spineCount = existing.SpineCount
+	} else if !errors.Is(err, models.ErrNotFound) {
+		return nil, fmt.Errorf("get aggregation for block %d: %w", blockID, err)
+	}
+	return s.AssignAggregation(blockID, models.NetworkPlaneFrontEnd, leafModelID, spineCount, 0)
 }
 
 // GetBlock returns the block with the given id.
