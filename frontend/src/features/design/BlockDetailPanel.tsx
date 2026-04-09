@@ -30,7 +30,9 @@ interface BlockDetailPanelProps {
   networkDevices: DeviceModel[];
   spineModelId?: number;
   spineCount: number | null;
+  hostLinkSpeedGbps: number;
   onSpineCountChange: (value: number) => void;
+  onHostLinkSpeedChange: (value: number) => void;
   onAssignSpine: (deviceModelId: number, initialSpineCount: number) => void;
 }
 
@@ -88,7 +90,8 @@ function deriveTopology(
   leafModel: DeviceModel | undefined,
   spineModel: DeviceModel | undefined,
   spineCount: number,
-  rackCount: number
+  rackCount: number,
+  hostLinkSpeedGbps: number
 ): TopologyPlan | null {
   if (!leafModel || !spineModel) return null;
 
@@ -98,15 +101,23 @@ function deriveTopology(
   let uplinks: number;
   let downlinks: number;
   let oversubscription: number;
+  let bandwidthOversubscription: number | undefined;
+  let uplinkSpeedGbps: number | undefined;
+  let downlinkSpeedGbps: number | undefined;
 
   if (portGroupResult) {
     // Port groups define the physical port layout.
     // Spine count determines how many uplink ports are actually used.
     uplinks = Math.min(spineCount, portGroupResult.uplinks);
     downlinks = portGroupResult.downlinks;
-    const downlinkBw = downlinks * portGroupResult.downlinkSpeed;
+
+    const effectiveDownlinkSpeed = hostLinkSpeedGbps > 0 ? hostLinkSpeedGbps : portGroupResult.downlinkSpeed;
+    const downlinkBw = downlinks * effectiveDownlinkSpeed;
     const uplinkBw = uplinks * portGroupResult.uplinkSpeed;
     oversubscription = uplinkBw > 0 ? downlinkBw / uplinkBw : Infinity;
+    bandwidthOversubscription = oversubscription;
+    uplinkSpeedGbps = portGroupResult.uplinkSpeed;
+    downlinkSpeedGbps = effectiveDownlinkSpeed;
   } else {
     // Uniform ports — spine count directly sets the uplink/downlink split.
     uplinks = spineCount;
@@ -129,6 +140,11 @@ function deriveTopology(
     leaf_uplinks: uplinks,
     total_switches: leafCount + spineCount,
     total_host_ports: leafCount * downlinks,
+    bandwidth_oversubscription: bandwidthOversubscription,
+    host_link_speed_gbps: hostLinkSpeedGbps || undefined,
+    uplink_speed_gbps: uplinkSpeedGbps,
+    downlink_speed_gbps: downlinkSpeedGbps,
+    bisection_bandwidth_gbps: uplinkSpeedGbps ? spineCount * uplinks * uplinkSpeedGbps : undefined,
   };
 }
 
@@ -139,7 +155,9 @@ export default function BlockDetailPanel({
   networkDevices,
   spineModelId,
   spineCount: spineCountProp,
+  hostLinkSpeedGbps,
   onSpineCountChange,
+  onHostLinkSpeedChange,
   onAssignSpine,
 }: BlockDetailPanelProps) {
   const frontendAgg = aggs.find((a) => a.plane === 'front_end');
@@ -158,8 +176,8 @@ export default function BlockDetailPanel({
   const effectiveSpineCount = spineCountProp ?? Math.min(2, maxSpineCount);
 
   const topology = useMemo(
-    () => deriveTopology(leafModel, spineModel, effectiveSpineCount, rackCount),
-    [leafModel, spineModel, effectiveSpineCount, rackCount]
+    () => deriveTopology(leafModel, spineModel, effectiveSpineCount, rackCount, hostLinkSpeedGbps),
+    [leafModel, spineModel, effectiveSpineCount, rackCount, hostLinkSpeedGbps]
   );
 
   // Count placed servers in compute racks
@@ -190,7 +208,6 @@ export default function BlockDetailPanel({
           onSelect={(id) => onAssignSpine(id, effectiveSpineCount)}
           placeholder="Select spine model…"
           triggerClassName="h-8 text-xs"
-          role="spine"
         />
       </div>
 
@@ -231,6 +248,29 @@ export default function BlockDetailPanel({
         </div>
       )}
 
+      {/* Server link speed */}
+      {leafModel && portGroupResult && (
+        <div className="space-y-1.5">
+          <Label className="text-xs flex items-center gap-1">
+            <Zap className="size-3" />
+            Server Link Speed
+          </Label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
+            value={hostLinkSpeedGbps}
+            onChange={(e) => onHostLinkSpeedChange(Number(e.target.value))}
+          >
+            <option value={0}>Auto ({portGroupResult.downlinkSpeed}G from port groups)</option>
+            <option value={10}>10 Gbps</option>
+            <option value={25}>25 Gbps</option>
+            <option value={50}>50 Gbps</option>
+            <option value={100}>100 Gbps</option>
+            <option value={200}>200 Gbps</option>
+            <option value={400}>400 Gbps</option>
+          </select>
+        </div>
+      )}
+
       {/* Derived oversubscription */}
       {topology && (
         <div className="space-y-1.5">
@@ -242,9 +282,11 @@ export default function BlockDetailPanel({
           <div className="rounded-md bg-muted/50 px-2.5 py-1.5">
             <p className="text-sm font-semibold">{topology.oversubscription.toFixed(1)}:1</p>
             <p className="text-[10px] text-muted-foreground">
-              {portGroupResult
-                ? `${portGroupResult.downlinks}×${portGroupResult.downlinkSpeed}G ↓ / ${effectiveSpineCount}×${portGroupResult.uplinkSpeed}G ↑`
-                : `${topology.leaf_downlinks} downlinks / ${topology.leaf_uplinks} uplinks`}
+              {portGroupResult && topology.downlink_speed_gbps
+                ? `${topology.leaf_downlinks}×${topology.downlink_speed_gbps}G ↓ / ${effectiveSpineCount}×${topology.uplink_speed_gbps}G ↑`
+                : portGroupResult
+                  ? `${portGroupResult.downlinks}×${portGroupResult.downlinkSpeed}G ↓ / ${effectiveSpineCount}×${portGroupResult.uplinkSpeed}G ↑`
+                  : `${topology.leaf_downlinks} downlinks / ${topology.leaf_uplinks} uplinks`}
             </p>
           </div>
         </div>
