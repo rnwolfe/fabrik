@@ -91,11 +91,11 @@ func (h *DeviceModelHandler) Create(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.CreateDeviceModel(dm)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusBadRequest, err)
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrDuplicate) {
-			writeDomainError(w, http.StatusConflict, err)
+			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
 		slog.Error("create device model", "err", err)
@@ -132,7 +132,7 @@ func (h *DeviceModelHandler) Get(w http.ResponseWriter, r *http.Request) {
 	dm, err := h.svc.GetDeviceModel(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "device model not found")
 			return
 		}
 		slog.Error("get device model", "err", err, "deviceModelID", id)
@@ -204,19 +204,19 @@ func (h *DeviceModelHandler) Update(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.UpdateDeviceModel(dm)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "device model not found")
 			return
 		}
 		if errors.Is(err, models.ErrSeedReadOnly) {
-			writeDomainError(w, http.StatusForbidden, err)
+			writeError(w, http.StatusForbidden, "seed device models are read-only")
 			return
 		}
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusBadRequest, err)
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrDuplicate) {
-			writeDomainError(w, http.StatusConflict, err)
+			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
 		slog.Error("update device model", "err", err, "deviceModelID", id)
@@ -236,11 +236,11 @@ func (h *DeviceModelHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.ArchiveDeviceModel(id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "device model not found")
 			return
 		}
 		if errors.Is(err, models.ErrSeedReadOnly) {
-			writeDomainError(w, http.StatusForbidden, err)
+			writeError(w, http.StatusForbidden, "seed device models are read-only")
 			return
 		}
 		slog.Error("archive device model", "err", err, "deviceModelID", id)
@@ -277,7 +277,7 @@ func (h *DeviceModelHandler) Duplicate(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.DuplicateDeviceModel(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "device model not found")
 			return
 		}
 		slog.Error("duplicate device model", "err", err, "deviceModelID", id)

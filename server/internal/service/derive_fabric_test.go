@@ -173,16 +173,46 @@ func TestDeriveFabric_2Stage_BlockOnly(t *testing.T) {
 	}
 }
 
-func TestDeriveFabric_3Stage_BlockAndSuperBlock(t *testing.T) {
+func TestDeriveFabric_2Stage_BlockAndSuperBlock(t *testing.T) {
+	// Super-block agg provides the spine model for the block's leaf-spine fabric.
+	// It should NOT add a 3rd stage — block + super_block = 2-stage.
 	repo := newFakeDeriveFabricRepo()
 	repo.addDesign(1)
 	repo.addSite(1, 10)
 	repo.addSuperBlock(10, 20)
 	repo.addBlock(20, 30)
-	repo.addDeviceModel(100, 48) // block-level spine (leaf radix=48)
-	repo.addDeviceModel(200, 64) // super-block-level super-spine
+	repo.addDeviceModel(100, 48) // block-level leaf (radix=48)
+	repo.addDeviceModel(200, 64) // super-block-level spine model
 	repo.setAgg(models.ScopeBlock, 30, models.PlaneFrontEnd, 1, 100, 4)
 	repo.setAgg(models.ScopeSuperBlock, 20, models.PlaneFrontEnd, 2, 200, 2)
+
+	svc := service.NewDeriveFabricService(repo)
+
+	df, err := svc.DeriveFabric(1, models.PlaneFrontEnd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if df.Stages != 2 {
+		t.Errorf("stages = %d, want 2", df.Stages)
+	}
+	if len(df.Tiers) != 2 {
+		t.Errorf("expected 2 tiers, got %d", len(df.Tiers))
+	}
+}
+
+func TestDeriveFabric_3Stage_WithSiteAgg(t *testing.T) {
+	// A site-level agg represents super-spines → 3-stage topology.
+	repo := newFakeDeriveFabricRepo()
+	repo.addDesign(1)
+	repo.addSite(1, 10)
+	repo.addSuperBlock(10, 20)
+	repo.addBlock(20, 30)
+	repo.addDeviceModel(100, 48) // block-level leaf
+	repo.addDeviceModel(200, 64) // super-block-level spine
+	repo.addDeviceModel(300, 128) // site-level super-spine
+	repo.setAgg(models.ScopeBlock, 30, models.PlaneFrontEnd, 1, 100, 4)
+	repo.setAgg(models.ScopeSuperBlock, 20, models.PlaneFrontEnd, 2, 200, 2)
+	repo.setAgg(models.ScopeSite, 10, models.PlaneFrontEnd, 3, 300, 2)
 
 	svc := service.NewDeriveFabricService(repo)
 
@@ -193,8 +223,8 @@ func TestDeriveFabric_3Stage_BlockAndSuperBlock(t *testing.T) {
 	if df.Stages != 3 {
 		t.Errorf("stages = %d, want 3", df.Stages)
 	}
-	if len(df.Tiers) != 2 {
-		t.Errorf("expected 2 tiers, got %d", len(df.Tiers))
+	if len(df.Tiers) != 3 {
+		t.Errorf("expected 3 tiers, got %d", len(df.Tiers))
 	}
 }
 

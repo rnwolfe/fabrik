@@ -269,9 +269,10 @@ type TierAggregation struct {
 	ScopeType     AggregationScope `json:"scope_type"`
 	ScopeID       int64            `json:"scope_id"`
 	Plane         NetworkPlane     `json:"plane"`
-	DeviceModelID int64            `json:"device_model_id"`
-	SpineCount    int              `json:"spine_count"`
-	CreatedAt     time.Time        `json:"created_at"`
+	DeviceModelID     int64            `json:"device_model_id"`
+	SpineCount        int              `json:"spine_count"`
+	HostLinkSpeedGbps int              `json:"host_link_speed_gbps"`
+	CreatedAt         time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
 }
 

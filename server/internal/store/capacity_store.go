@@ -20,36 +20,34 @@ func NewCapacityStore(db *sql.DB) *CapacityStore {
 
 // aggregateRow is the shared column set returned by all capacity queries.
 // SUM returns NULL when there are no rows; COALESCE ensures 0 is returned instead.
+// TotalVCPU is computed as SUM(cpu_sockets * cores_per_socket) per-row so that
+// multiplying the sums (which gives an incorrect N² result) is avoided.
 const aggregateCols = `
-	COALESCE(SUM(dm.power_watts_idle),    0) AS power_watts_idle,
-	COALESCE(SUM(dm.power_watts_typical), 0) AS power_watts_typical,
-	COALESCE(SUM(dm.power_watts_max),     0) AS power_watts_max,
-	COALESCE(SUM(dm.cpu_sockets),         0) AS cpu_sockets,
-	COALESCE(SUM(dm.cores_per_socket),    0) AS cores_per_socket,
-	COALESCE(SUM(dm.ram_gb),              0) AS ram_gb,
-	COALESCE(SUM(dm.storage_tb),          0) AS storage_tb,
-	COALESCE(SUM(dm.gpu_count),           0) AS gpu_count,
-	COUNT(d.id)                              AS device_count`
+	COALESCE(SUM(dm.power_watts_idle),                  0) AS power_watts_idle,
+	COALESCE(SUM(dm.power_watts_typical),               0) AS power_watts_typical,
+	COALESCE(SUM(dm.power_watts_max),                   0) AS power_watts_max,
+	COALESCE(SUM(dm.cpu_sockets * dm.cores_per_socket), 0) AS total_vcpu,
+	COALESCE(SUM(dm.ram_gb),                            0) AS ram_gb,
+	COALESCE(SUM(dm.storage_tb),                        0) AS storage_tb,
+	COALESCE(SUM(dm.gpu_count),                         0) AS gpu_count,
+	COUNT(d.id)                                            AS device_count`
 
 // scanCapacity scans the aggregate columns from a *sql.Row into a CapacitySummary.
-// vCPU is computed as cpu_sockets * cores_per_socket after the scan.
 func scanCapacity(row *sql.Row, level models.CapacityLevel, id int64, name string) (*models.CapacitySummary, error) {
 	c := &models.CapacitySummary{
 		Level: level,
 		ID:    id,
 		Name:  name,
 	}
-	var cpuSockets, coresPerSocket int
 	err := row.Scan(
 		&c.PowerWattsIdle, &c.PowerWattsTypical, &c.PowerWattsMax,
-		&cpuSockets, &coresPerSocket,
+		&c.TotalVCPU,
 		&c.TotalRAMGB, &c.TotalStorageTB, &c.TotalGPUCount,
 		&c.DeviceCount,
 	)
 	if err != nil {
 		return nil, err
 	}
-	c.TotalVCPU = cpuSockets * coresPerSocket
 	return c, nil
 }
 

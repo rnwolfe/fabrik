@@ -52,11 +52,11 @@ func (h *ManagementHandler) SetManagementAgg(w http.ResponseWriter, r *http.Requ
 	agg, err := h.svc.SetManagementAgg(blockID, req.DeviceModelID)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusUnprocessableEntity, err)
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		slog.Error("set management agg", "err", err, "blockID", blockID)
@@ -76,7 +76,7 @@ func (h *ManagementHandler) GetManagementAgg(w http.ResponseWriter, r *http.Requ
 	agg, err := h.svc.GetManagementAgg(blockID)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "no management aggregation assigned to this block")
 			return
 		}
 		slog.Error("get management agg", "err", err, "blockID", blockID)
@@ -95,7 +95,7 @@ func (h *ManagementHandler) RemoveManagementAgg(w http.ResponseWriter, r *http.R
 
 	if err := h.svc.RemoveManagementAgg(blockID); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "no management aggregation assigned to this block")
 			return
 		}
 		slog.Error("remove management agg", "err", err, "blockID", blockID)

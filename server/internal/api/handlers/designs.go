@@ -56,7 +56,7 @@ func (h *DesignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	d, err := h.svc.CreateDesign(req.Name, req.Description)
 	if err != nil {
 		if errors.Is(err, models.ErrConstraintViolation) {
-			writeDomainError(w, http.StatusUnprocessableEntity, err)
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		slog.Error("create design", "err", err)
@@ -92,7 +92,7 @@ func (h *DesignHandler) Get(w http.ResponseWriter, r *http.Request) {
 	d, err := h.svc.GetDesign(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "design not found")
 			return
 		}
 		slog.Error("get design", "err", err, "designID", id)
@@ -112,7 +112,7 @@ func (h *DesignHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.DeleteDesign(id); err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "design not found")
 			return
 		}
 		slog.Error("delete design", "err", err, "designID", id)
@@ -134,7 +134,7 @@ func (h *DesignHandler) Scaffold(w http.ResponseWriter, r *http.Request) {
 	scaffold, err := h.svc.GetScaffold(id)
 	if err != nil {
 		if errors.Is(err, models.ErrNotFound) {
-			writeDomainError(w, http.StatusNotFound, err)
+			writeError(w, http.StatusNotFound, "design not found")
 			return
 		}
 		slog.Error("scaffold design", "err", err, "designID", id)
@@ -147,13 +147,8 @@ func (h *DesignHandler) Scaffold(w http.ResponseWriter, r *http.Request) {
 
 // --- helpers ---
 
-// errorResponse is the JSON body for all error responses.
-// The Error field is kept for one-release backwards compatibility.
 type errorResponse struct {
-	Code    string            `json:"code"`
-	Message string            `json:"message"`
-	Refs    []models.ErrRef   `json:"refs,omitempty"`
-	Error   string            `json:"error"`
+	Error string `json:"error"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -164,24 +159,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// writeError writes a plain-string error response with code "unknown".
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, errorResponse{Code: "unknown", Message: msg, Error: msg})
-}
-
-// writeDomainError writes a structured error response derived from a DomainError.
-// If err is not a *models.DomainError, it falls back to writeError.
-func writeDomainError(w http.ResponseWriter, status int, err error) {
-	if de, ok := models.IsDomainError(err); ok {
-		writeJSON(w, status, errorResponse{
-			Code:    de.Code(),
-			Message: err.Error(),
-			Refs:    de.Refs,
-			Error:   err.Error(),
-		})
-		return
-	}
-	writeError(w, status, err.Error())
+	writeJSON(w, status, errorResponse{Error: msg})
 }
 
 // parseID extracts a path parameter named key from the URL path using Go 1.22+
