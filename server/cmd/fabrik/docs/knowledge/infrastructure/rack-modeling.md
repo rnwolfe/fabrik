@@ -56,6 +56,39 @@ Power is a **soft limit**: oversubscription is allowed, but warned:
 
 This allows for planning headroom and accounting for redundant PSU configurations.
 
+## Inline Violation Text
+
+When a rack exceeds its physical constraints, fabrik surfaces the exact violation inline — no hover required:
+
+### Rack Elevation (Design view)
+
+In the rack detail panel (right-side config panel), violations appear directly beneath the relevant stat:
+
+| Constraint | Inline message | Example |
+|-----------|---------------|---------|
+| Power over capacity | Below Power % stat | `+110 W over limit` |
+| RU over height | Below Used stat | `+4U over height` |
+
+The message only appears when violated; healthy racks show no extra text.
+
+### Racks Page (list view)
+
+In the "Used / Total (U)" column, an overflow delta is appended inline when `used_u > height_u`:
+
+```
+46 / 42U · +4U
+```
+
+This format makes it instantly scannable across many racks without requiring any interaction.
+
+### Example: violated rack
+
+A rack with `height_u: 42`, `used_u: 46`, `power_capacity_w: 10000`, `used_watts_typical: 11000`:
+
+- Racks page: `46 / 42U · +4U`
+- Design detail panel — Used stat: `+4U over height`
+- Design detail panel — Power stat: `+1000 W over limit`
+
 ## API Overview
 
 ### Rack Types

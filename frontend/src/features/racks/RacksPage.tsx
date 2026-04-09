@@ -53,6 +53,17 @@ const warningKindLabel: Record<RackWarning['kind'], string> = {
 };
 
 /**
+ * Returns the RU overflow delta (in U) when used_u exceeds height_u,
+ * sourced from the structured warnings list. Returns null if no RU violation.
+ */
+export function getRuOverflowDelta(rack: Pick<RackSummary, 'used_u' | 'height_u' | 'warnings'>): number | null {
+  if (!rack.warnings || rack.warnings.length === 0) return null;
+  const rw = rack.warnings.find((w) => w.kind === 'ru');
+  if (!rw || rw.delta_u == null || rw.delta_u <= 0) return null;
+  return rw.delta_u;
+}
+
+/**
  * Renders one badge per structured warning. Each badge shows a short label and a
  * tooltip with the full detail message. If the rack belongs to a block, clicking
  * the badge navigates to the Design page with that block pre-selected.
@@ -382,10 +393,20 @@ export default function RacksPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        <span className={rack.used_u > rack.height_u ? 'text-destructive' : ''}>
-                          {rack.used_u}
-                        </span>
-                        <span className="text-muted-foreground"> / {rack.height_u}U</span>
+                        {(() => {
+                          const delta = getRuOverflowDelta(rack);
+                          return (
+                            <>
+                              <span className={rack.used_u > rack.height_u ? 'text-destructive' : ''}>
+                                {rack.used_u}
+                              </span>
+                              <span className="text-muted-foreground"> / {rack.height_u}U</span>
+                              {delta != null && (
+                                <span className="ml-1 text-destructive"> · +{delta}U</span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {rack.used_watts_typical.toLocaleString()}W

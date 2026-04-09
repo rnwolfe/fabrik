@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import DeviceModelPicker from '@/components/DeviceModelPicker';
 import { cn } from '@/lib/utils';
-import type { DeviceModel, DeviceSummary } from '@/models';
+import type { DeviceModel, DeviceSummary, RackWarning } from '@/models';
 
 // Role → display color
 const ROLE_COLORS: Record<string, string> = {
@@ -91,11 +91,33 @@ function DeviceDetail({ device, onBack }: { device: DeviceSummary; onBack: () =>
 
 // ─── Rack config panel (default right-side content) ───────────────────────────
 
+/**
+ * Returns inline violation text for power overages, e.g. "+110 W over limit".
+ * Returns null if no power violation or warnings missing.
+ */
+export function getPowerViolationText(warnings?: RackWarning[]): string | null {
+  if (!warnings || warnings.length === 0) return null;
+  const pw = warnings.find((w) => w.kind === 'power');
+  if (!pw || pw.delta_w == null || pw.delta_w <= 0) return null;
+  return `+${pw.delta_w} W over limit`;
+}
+
+/**
+ * Returns inline violation text for RU overages, e.g. "+4U over height".
+ * Returns null if no RU violation or warnings missing.
+ */
+export function getRuViolationText(warnings?: RackWarning[]): string | null {
+  if (!warnings || warnings.length === 0) return null;
+  const rw = warnings.find((w) => w.kind === 'ru');
+  if (!rw || rw.delta_u == null || rw.delta_u <= 0) return null;
+  return `+${rw.delta_u}U over height`;
+}
+
 function RackConfig({
   rack,
   serverModels,
 }: {
-  rack: { id: number; role: string; height_u: number; used_u: number; available_u: number; power_capacity_w: number; used_watts_typical: number; devices?: DeviceSummary[] };
+  rack: { id: number; role: string; height_u: number; used_u: number; available_u: number; power_capacity_w: number; used_watts_typical: number; devices?: DeviceSummary[]; warnings?: RackWarning[] };
   serverModels: DeviceModel[];
 }) {
   const queryClient = useQueryClient();
@@ -126,6 +148,9 @@ function RackConfig({
       ? Math.min(100, Math.round((rack.used_watts_typical / rack.power_capacity_w) * 100))
       : 0;
 
+  const powerViolation = getPowerViolationText(rack.warnings);
+  const ruViolation = getRuViolationText(rack.warnings);
+
   return (
     <div className="space-y-4">
       {/* Stats */}
@@ -133,6 +158,9 @@ function RackConfig({
         <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-center">
           <p className="text-[10px] text-muted-foreground">Used</p>
           <p className="text-sm font-semibold font-mono">{rack.used_u}/{rack.height_u}U</p>
+          {ruViolation && (
+            <p className="text-[10px] text-destructive font-medium mt-0.5">{ruViolation}</p>
+          )}
         </div>
         <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-center">
           <p className="text-[10px] text-muted-foreground">Free</p>
@@ -156,6 +184,9 @@ function RackConfig({
           >
             {powerPct}%
           </p>
+          {powerViolation && (
+            <p className="text-[10px] text-destructive font-medium mt-0.5">{powerViolation}</p>
+          )}
         </div>
       </div>
 
