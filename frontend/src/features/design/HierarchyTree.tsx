@@ -28,6 +28,7 @@ import {
 import { sitesApi } from '@/api/sites';
 import { superblocksApi } from '@/api/superblocks';
 import { blocksApi } from '@/api/blocks';
+import { HelpLink } from '@/components/HelpLink';
 import type {
   DesignHierarchy,
   HierarchySite,
@@ -470,8 +471,9 @@ export default function HierarchyTree({ designId, selectedBlockId, onSelectBlock
     <div className="flex flex-col">
       {/* Section header */}
       <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+        <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
           Hierarchy
+          <HelpLink article="hierarchy" />
         </span>
         <Button
           variant="ghost"
