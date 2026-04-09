@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { buildBlockUrl } from './useDeepLinkToBlock';
 
 /**
  * Unit tests for the deep-link-to-block URL building logic.
@@ -8,12 +9,6 @@ import { describe, it, expect } from 'vitest';
  * the URL-building contract and the block-resolution logic that mirrors the
  * DesignPage useEffect.
  */
-
-// ── Pure URL builder ─────────────────────────────────────────────────────────
-
-function buildBlockUrl(blockId: number): string {
-  return `/design?block=${blockId}`;
-}
 
 // ── Deep-link resolution (mirrors DesignPage useEffect logic) ────────────────
 

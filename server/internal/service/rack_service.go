@@ -264,10 +264,14 @@ func (s *RackService) GetRackSummary(id int64) (*models.RackSummary, error) {
 		usedMax += d.PowerWattsMax
 	}
 
+	availableU := rack.HeightU - usedU
+	if availableU < 0 {
+		availableU = 0
+	}
 	summary := &models.RackSummary{
 		Rack:             *rack,
 		UsedU:            usedU,
-		AvailableU:       rack.HeightU - usedU,
+		AvailableU:       availableU,
 		UsedWattsIdle:    usedIdle,
 		UsedWattsTypical: usedTypical,
 		UsedWattsMax:     usedMax,

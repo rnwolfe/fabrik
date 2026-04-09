@@ -82,14 +82,16 @@ function RackWarningBadges({ rack }: { rack: RackSummary }) {
         if (rack.block_id) {
           return (
             <Tooltip key={i}>
-              <TooltipTrigger>
-                <Link
-                  to={`/design?block=${rack.block_id}`}
-                  aria-label={`Go to block containing this rack (${w.kind} warning)`}
-                >
-                  {badgeEl}
-                </Link>
-              </TooltipTrigger>
+              <TooltipTrigger
+                render={
+                  <Link
+                    to={`/design?block=${rack.block_id}`}
+                    aria-label={`Go to block containing this rack (${w.kind} warning)`}
+                  >
+                    {badgeEl}
+                  </Link>
+                }
+              />
               <TooltipContent className="max-w-[260px] text-xs">{w.detail}</TooltipContent>
             </Tooltip>
           );
