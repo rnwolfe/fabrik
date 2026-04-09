@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { metricsApi } from '@/api/metrics';
 import { designsApi } from '@/api/designs';
 import { useDesign } from '@/contexts/DesignContext';
@@ -155,8 +156,14 @@ export default function MetricsPage() {
                   Choke Point Detected
                 </p>
                 <p className="mt-0.5 text-sm text-amber-600 dark:text-amber-400">
-                  <strong>{metrics.choke_point.fabric_name}</strong> (
-                  {tierLabel[metrics.choke_point.tier]}) has the worst oversubscription at{' '}
+                  <Link
+                    to="/design"
+                    className="font-semibold underline underline-offset-2 hover:text-amber-800 dark:hover:text-amber-200"
+                    title="Go to Design page to review this fabric"
+                  >
+                    {metrics.choke_point.fabric_name}
+                  </Link>{' '}
+                  ({tierLabel[metrics.choke_point.tier]}) has the worst oversubscription at{' '}
                   <strong>{metrics.choke_point.ratio.toFixed(2)}:1</strong>
                 </p>
               </div>
