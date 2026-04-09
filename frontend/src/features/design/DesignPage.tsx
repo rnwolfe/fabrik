@@ -32,6 +32,7 @@ import BlockCard from './BlockCard';
 import BlockDetailPanel from './BlockDetailPanel';
 import DesignSummary from './DesignSummary';
 import RackElevation from './RackElevation';
+import MetricsStrip from './MetricsStrip';
 import type { Block, BlockAggregationSummary, RackSummary, DeviceModel } from '@/models';
 
 // ─── New Block form schema ───────────────────────────────────────────────────
@@ -414,6 +415,9 @@ export default function DesignPage() {
           </Button>
         </div>
       </div>
+
+      {/* Metrics strip */}
+      <MetricsStrip designId={activeDesignId} />
 
       {/* Two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
